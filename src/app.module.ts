@@ -9,6 +9,7 @@ import { ApproversModule } from './hr/approvers/approvers.module';
 import { LeaveModule } from './hr/leave/leave.module';
 import { AttendanceModule } from './hr/attendance/attendance.module';
 import { DashboardModule } from './hr/dashboard/dashboard.module';
+import { NewsModule } from './hr/news/news.module';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 
 @Module({
@@ -20,6 +21,7 @@ import { ResponseEnvelopeInterceptor } from './common/interceptors/response-enve
     LeaveModule,
     AttendanceModule,
     DashboardModule,
+    NewsModule,
   ],
   controllers: [AppController],
   providers: [
