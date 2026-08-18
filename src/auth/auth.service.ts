@@ -30,7 +30,7 @@ export class AuthService {
       throw new UnauthorizedException('Sai tài khoản hoặc mật khẩu');
     }
 
-    return this.buildAuthResponse(user.id, user.username, user.role);
+    return this.buildAuthResponse(user.id, user.username, user.isAdmin, user.orgRole);
   }
 
   async refreshToken(refreshToken: string) {
@@ -52,15 +52,16 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
-    return this.buildAuthResponse(user.id, user.username, user.role);
+    return this.buildAuthResponse(user.id, user.username, user.isAdmin, user.orgRole);
   }
 
   private async buildAuthResponse(
     id: number,
     username: string,
-    role: JwtPayload['role'],
+    isAdmin: boolean,
+    orgRole: JwtPayload['orgRole'],
   ) {
-    const payload: JwtPayload = { sub: id, username, role };
+    const payload: JwtPayload = { sub: id, username, isAdmin, orgRole };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
@@ -76,7 +77,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id, username, role },
+      user: { id, username, isAdmin, orgRole },
     };
   }
 }
