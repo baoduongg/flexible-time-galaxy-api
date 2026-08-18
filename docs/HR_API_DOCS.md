@@ -13,8 +13,9 @@ Quy ước path: đề xuất gộp vào prefix `/api/g-care/` hiện có (giữ
 /api/g-care/hr/attendance/...
 /api/g-care/hr/dashboard/...
 /api/g-care/hr/news/...
-/api/g-care/hr/approvers
 ```
+
+> **Cập nhật:** domain HR nay đã có BE thật, nhưng được mount dưới `/api/g-care/admin/...` và `/api/g-care/app/...` (tách theo portal admin/app) thay vì nhóm `/api/g-care/hr/...` đề xuất ban đầu ở trên — xem [`ADMIN_API_DOCS.md`](./ADMIN_API_DOCS.md) và [`APP_API_DOCS.md`](./APP_API_DOCS.md) để biết path thật. Phần đề xuất `/hr/...` bên dưới được giữ nguyên làm tài liệu tham khảo lịch sử; riêng các đoạn liên quan tới `approver_id`/role đã được cập nhật theo model hiện tại (org hierarchy `orgRole` + chuỗi `approval_steps`) để tránh gây hiểu nhầm khi đọc lại.
 
 Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: Bearer <access_token>`, JWT lấy từ `POST /api/g-care/auth`, đã có tài liệu tại [`GCARE_API.md`](../GCARE_API.md)) — **không** cần login riêng cho domain HR, và cũng không cần build lại phần auth.
 
@@ -50,8 +51,9 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
   "attendance_date": null,
   "correction_time": null,
   "status": "pending",
-  "approver_id": 7,
-  "approver_name": "Trần Thị B (Trưởng nhóm)",
+  "approval_steps": [
+    { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "pending", "note": null, "decided_at": null }
+  ],
   "reason": "Việc gia đình",
   "decided_at": null,
   "decided_by": null,
@@ -63,7 +65,8 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
 
 - `leave_type` enum: `annual` (nghỉ phép có lương), `unpaid` (không lương), `maternity` (thai sản), `feedback` (giải trình/điều chỉnh công — sinh từ màn hình Lịch sử chấm công, xem mục 3.3). BE nên trả kèm `leave_type_label` để FE khỏi tự map (hiện FE map cứng trong `leaveCreate`).
 - `attendance_date` + `correction_time`: chỉ có giá trị khi `leave_type = "feedback"` — ngày công cần giải trình và giờ chấm công thực tế nhập tay (input `type=time` trên form).
-- `status` enum: `pending | approved | rejected`.
+- `status` enum: `pending | approved | rejected` — trạng thái tổng của cả đơn.
+- `approval_steps`: mảng các bước duyệt tuần tự, mỗi bước có `level` (`LEADER | MANAGER | DIRECTOR`, resolve tự động từ team/phòng ban của người tạo đơn), `approver_id`/`approver_name`, `status` riêng của bước (`pending | approved | rejected`), `note`, `decided_at`. Không còn model "1 approver cố định chọn tay" như đề xuất gốc bên dưới — BE tự dựng chuỗi theo cấu trúc tổ chức.
 - `duration_days`: BE tự tính từ `start_date`/`end_date` (hoặc theo bảng chấm công nếu cần trừ ngày lễ/cuối tuần) — FE hiện chỉ hiển thị chuỗi tự do (`"0.5 ngày"`, `"180 ngày"`...), nên cần BE trả cả `duration_days` (number, hỗ trợ 0.5/0.25 cho nghỉ nửa/¼ ngày) lẫn `duration_label` (chuỗi hiển thị sẵn).
 
 ### 2.2 Tạo đơn nghỉ phép
@@ -75,7 +78,6 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
   ```json
   {
     "leave_type": "annual",
-    "approver_id": 7,
     "start_date": "2026-08-20",
     "end_date": "2026-08-20",
     "reason": "Việc gia đình",
@@ -84,6 +86,7 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
   }
   ```
 - Validate: `reason` bắt buộc (FE giới hạn 200 ký tự), `attendance_date`+`correction_time` bắt buộc khi `leave_type = "feedback"`.
+- **Không còn** field `approver_id` trong body — chuỗi `approval_steps` được BE tự resolve theo tổ chức của người tạo đơn (leader của team → manager của phòng ban → …), FE không cho chọn người duyệt nữa.
 - Response (200/201):
   ```json
   { "status": "created", "data": { "id": 123, "status": "pending", "...": "toàn bộ field model 2.1" } }
@@ -102,7 +105,7 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
 
 - Method: `GET`
 - URL: `/api/g-care/hr/leave/approval`
-- Header: yêu cầu role có quyền duyệt (approver/admin) — BE tự lọc theo `approver_id = current_user` hoặc theo `admin`.
+- Header: yêu cầu tài khoản có quyền duyệt (`isAdmin = true` hoặc `orgRole >= LEADER`) — BE tự lọc các đơn có một bước trong `approval_steps` đang `pending` và `approver_id = current_user` (không còn field `approver_id` cố định trên đơn).
 - Query: `status` (default trả tất cả trạng thái BE quản lý), `page`, `page_size`
 - Response: giống 2.3, kèm thêm field đếm để hiển thị badge tab "Chờ duyệt (n)":
   ```json
@@ -125,22 +128,15 @@ Auth dùng chung endpoint xác thực sẵn có của backend (`Authorization: B
   ```json
   { "note": "Lý do từ chối (nếu có)" }
   ```
-- Quyền: chỉ `approver_id` của đơn hoặc admin mới được gọi; chỉ hợp lệ khi `status = pending`.
+- Quyền: chỉ `approver_id` của **bước đang `pending`** trong `approval_steps` hoặc admin mới được gọi; chỉ hợp lệ khi bước đó đang `pending`. Approve một bước không phải bước cuối sẽ chuyển đơn sang bước tiếp theo (`status` tổng của đơn vẫn `pending`); reject ở bất kỳ bước nào chuyển thẳng `status` tổng của đơn sang `rejected`.
 - Response: `{"status": "success", "data": LeaveRequest}` (status đã đổi thành `approved`/`rejected`, kèm `decided_at`, `decided_by`).
 - Ghi chú: đây là API **quan trọng nhất còn thiếu** — hiện `handleApprove`/`handleReject` trong `leaveApproval/detail.tsx` chỉ `setTimeout` giả rồi quay lại màn trước, **không lưu gì cả**.
 
-### 2.7 Danh sách người duyệt (approver lookup)
+### 2.7 ~~Danh sách người duyệt (approver lookup)~~ — không còn cần thiết
 
-- Method: `GET`
-- URL: `/api/g-care/hr/approvers`
-- Response:
-  ```json
-  { "status": "success", "data": [
-    { "id": 7, "name": "Trần Thị B", "role_label": "Trưởng nhóm" },
-    { "id": 8, "name": "Phòng Hành chính Nhân sự", "role_label": "HR" }
-  ] }
-  ```
-- Ghi chú: `leaveCreate/index.tsx` hiện hardcode đúng 2 lựa chọn này (`manager_1`, `hr_1`) trong code — cần API để thay bằng danh sách thật (org chart/quản lý trực tiếp).
+Đề xuất gốc (endpoint `GET /api/g-care/hr/approvers` để FE render dropdown chọn người duyệt lúc tạo đơn) đã **không được triển khai theo hướng đó**: BE thật tự resolve chuỗi phê duyệt (`approval_steps`, xem mục 2.1/2.2) từ cấu trúc tổ chức (`Team.leader`, `Department.manager`) thay vì để user chọn tay. Vì vậy không có — và không cần — endpoint lookup approver nào; FE cũng không còn hardcode `manager_1`/`hr_1` như ghi chú gốc từng đề cập.
+
+Tương đương thật ngoài đời: module quản lý Team/Department (`GET/POST/PATCH /api/g-care/admin/org/teams`, `/api/g-care/admin/org/departments`) — xem [`ADMIN_API_DOCS.md`](./ADMIN_API_DOCS.md) §3.6.
 
 ### 2.8 Quỹ phép năm (leave balance)
 
@@ -240,6 +236,7 @@ Không phải API riêng — đây chính là `LeaveRequest` với `leave_type =
   ```
 - Thay thế 3 mock: `TEAM_STATISTICS`, top-3 `pending` trong `MOCK_LEAVE_REQUESTS`, `ABSENCE_LIST`.
 - `pending_leave_requests` nên giới hạn server-side (BE trả sẵn 3 item mới nhất) thay vì FE tự cắt mảng như hiện tại.
+- `total_admins`/`total_members`: tên field giữ nguyên nhưng BE thật đếm theo cờ `isAdmin` (`true`/`false`), không phải theo enum `Role` 2 giá trị như đề xuất ban đầu — org hierarchy thật có 4 cấp `orgRole` (`MEMBER|LEADER|MANAGER|DIRECTOR`) độc lập với `isAdmin`. BE thật cũng có thêm 2 biến thể scoped: `GET /api/g-care/app/dashboard/leader` (team) và `GET /api/g-care/app/dashboard/manager` (phòng ban) — xem `APP_API_DOCS.md` §3.6.
 
 ### 4.2 Dashboard Member
 
@@ -312,7 +309,7 @@ Các phần sau tồn tại trong code nhưng không được bất kỳ trang n
 | Màn hình | API cần |
 |---|---|
 | `login` | `POST /api/g-care/auth`, `GET /api/g-care/me` |
-| `leaveCreate` | `POST /api/g-care/hr/leave`, `GET /api/g-care/hr/approvers` |
+| `leaveCreate` | `POST /api/g-care/hr/leave` (không cần lookup approver — BE tự resolve `approval_steps`) |
 | `leaveList` | `GET /api/g-care/hr/leave/mine` |
 | `leaveApproval` (list) | `GET /api/g-care/hr/leave/approval` |
 | `leaveApproval/detail` | `GET /api/g-care/hr/leave/<id>`, `PATCH .../approve`, `PATCH .../reject` |

@@ -53,7 +53,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 | 15 | **Leave** | `PATCH` | `/api/g-care/app/leave/:id/reject` | Từ chối đơn xin nghỉ phép | Có (JWT) |
 | 16 | **News** | `GET` | `/api/g-care/app/news` | Danh sách tin tức, bài viết nội bộ | Không |
 | 17 | **News** | `GET` | `/api/g-care/app/news/:id` | Chi tiết một bài viết tin tức | Không |
-| 18 | **Approvers** | `GET` | `/api/g-care/app/approvers` | Danh sách người có quyền duyệt đơn | Có (JWT) |
+| 18 | **Dashboard** | `GET` | `/api/g-care/app/dashboard/leader` | Số liệu bảng điều khiển của Trưởng nhóm (team mình quản lý) | Có (JWT, orgRole ≥ LEADER) |
+| 19 | **Dashboard** | `GET` | `/api/g-care/app/dashboard/manager` | Số liệu bảng điều khiển của Trưởng phòng (phòng ban mình quản lý) | Có (JWT, orgRole ≥ MANAGER) |
 
 ---
 
@@ -81,11 +82,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "user": {
         "id": 1,
         "username": "nguyenvana",
-        "email": "vana@g-care.vn",
-        "firstName": "Văn A",
-        "lastName": "Nguyễn",
-        "role": "MEMBER",
-        "isApprover": false
+        "isAdmin": false,
+        "orgRole": "MEMBER"
       }
     }
   }
@@ -120,7 +118,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
     "data": {
       "sub": 1,
       "username": "nguyenvana",
-      "role": "MEMBER",
+      "isAdmin": false,
+      "orgRole": "MEMBER",
       "iat": 1723968000,
       "exp": 1724054400
     }
@@ -281,12 +280,12 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
     "leave_type": "annual", // "annual" | "unpaid" | "maternity" | "feedback"
     "start_date": "2026-08-20",
     "end_date": "2026-08-21",
-    "approver_id": 2,
     "reason": "Bận việc gia đình",
     "attendance_date": null, // Dành riêng cho loại feedback (giải trình công), VD: "2026-08-17"
     "correction_time": null  // Dành riêng cho feedback, VD: "08:30"
   }
   ```
+* **Ghi chú:** không còn truyền `approver_id` khi tạo đơn — chuỗi phê duyệt (`approval_steps`) được BE tự resolve theo cấu trúc tổ chức của người tạo đơn (leader của team → manager của department → …), không cho chọn tay người duyệt nữa.
 * **Response (201 Created):**
   ```json
   {
@@ -302,8 +301,10 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "duration_days": 2,
       "duration_label": "2 ngày",
       "status": "pending",
-      "approver_id": 2,
-      "approver_name": "Trần Thị Quản Lý",
+      "approval_steps": [
+        { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "pending", "note": null, "decided_at": null },
+        { "level": "MANAGER", "approver_id": 8, "approver_name": "Lê Văn C", "status": "pending", "note": null, "decided_at": null }
+      ],
       "reason": "Bận việc gia đình",
       "created_at": "2026-08-18T07:45:00.000Z"
     }
@@ -332,7 +333,10 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
           "duration_days": 2,
           "duration_label": "2 ngày",
           "status": "pending",
-          "approver_name": "Trần Thị Quản Lý",
+          "approval_steps": [
+            { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "pending", "note": null, "decided_at": null },
+            { "level": "MANAGER", "approver_id": 8, "approver_name": "Lê Văn C", "status": "pending", "note": null, "decided_at": null }
+          ],
           "reason": "Bận việc gia đình",
           "created_at": "2026-08-18T07:45:00.000Z"
         }
@@ -350,6 +354,7 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 #### 11. Danh sách đơn cần tôi phê duyệt
 * **Endpoint:** `GET /api/g-care/app/leave/approval`
 * **Headers:** `Authorization: Bearer <access_token>`
+* **Ghi chú:** trả về các đơn mà người gọi có một **bước (`approval_steps`) đang ở trạng thái `pending` và được gán cho họ** — không còn nghĩa là "đơn mà tôi là người duyệt cố định" như model cũ. Một đơn có thể xuất hiện trong danh sách "cần duyệt" của nhiều người khác nhau tùy theo bước hiện tại của chuỗi.
 * **Query Parameters:** `page`, `page_size`, `status`
 * **Response (200 OK):**
   ```json
@@ -403,8 +408,10 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "duration_days": 2,
       "duration_label": "2 ngày",
       "status": "pending",
-      "approver_id": 2,
-      "approver_name": "Trần Thị Quản Lý",
+      "approval_steps": [
+        { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "pending", "note": null, "decided_at": null },
+        { "level": "MANAGER", "approver_id": 8, "approver_name": "Lê Văn C", "status": "pending", "note": null, "decided_at": null }
+      ],
       "reason": "Bận việc gia đình",
       "decided_at": null,
       "decided_by": null,
@@ -487,23 +494,39 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 
 ---
 
-### 3.6 Module: Approvers (Danh sách người duyệt)
+### 3.6 Module: Dashboard Leader / Manager
 
-#### 18. Lấy danh sách người duyệt
-* **Endpoint:** `GET /api/g-care/app/approvers`
+Cùng shape response với `GET /api/g-care/admin/dashboard/admin`, nhưng số liệu chỉ tính trong phạm vi team/phòng ban mà người gọi phụ trách.
+
+#### 18. Dashboard Trưởng nhóm
+* **Endpoint:** `GET /api/g-care/app/dashboard/leader`
 * **Headers:** `Authorization: Bearer <access_token>`
-* **Mô tả:** Lấy danh sách CBNV có quyền phê duyệt (`isApprover = true`) để hiển thị dropdown khi tạo đơn xin nghỉ phép.
+* **Phân quyền:** yêu cầu `orgRole >= LEADER` (hoặc `isAdmin = true`); trả `404` nếu user hiện tại không phải leader của team nào.
+* **Mô tả:** Thống kê giới hạn trong team mà user hiện tại đang làm leader.
 * **Response (200 OK):**
   ```json
   {
     "status": "success",
-    "data": [
-      {
-        "id": 2,
-        "name": "Trần Thị Quản Lý",
-        "username": "quanly_tt",
-        "email": "quanly@g-care.vn"
-      }
-    ]
+    "data": {
+      "team_statistics": {
+        "total_employees": 8,
+        "total_admins": 0,
+        "total_members": 8,
+        "present": 7,
+        "absent": { "total": 1, "approved": 1, "unapproved": 0 },
+        "pending_approvals": 2
+      },
+      "pending_leave_requests": [ "3 LeaveRequest gần nhất trong team, status=pending" ],
+      "absent_today": [
+        { "id": 12, "name": "Phạm Văn D", "role_label": "Nhân viên", "leave_type_label": "Nghỉ phép năm", "avatar_initial": "D" }
+      ]
+    }
   }
   ```
+
+#### 19. Dashboard Trưởng phòng
+* **Endpoint:** `GET /api/g-care/app/dashboard/manager`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Phân quyền:** yêu cầu `orgRole >= MANAGER` (hoặc `isAdmin = true`); trả `404` nếu user hiện tại không phải manager của phòng ban nào.
+* **Mô tả:** Thống kê giới hạn trong toàn bộ các team thuộc phòng ban mà user hiện tại đang làm manager.
+* **Response (200 OK):** cùng shape như mục 18, phạm vi mở rộng ra toàn phòng ban.
