@@ -13,7 +13,7 @@ import { LeaveService } from './leave.service';
 describe('LeaveService', () => {
   let service: LeaveService;
   const prisma = {
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), findFirst: jest.fn() },
     leaveRequest: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -39,56 +39,49 @@ describe('LeaveService', () => {
   });
 
   describe('create', () => {
-    it('rejects when approver_id is not a valid approver', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 7, isApprover: false });
+    it('throws when the requester has no team leader assigned', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        orgRole: 'MEMBER',
+        team: null,
+        ledTeam: null,
+      });
+      prisma.user.findFirst.mockResolvedValue(null);
 
       await expect(
         service.create(1, {
           leave_type: LeaveType.annual,
-          approver_id: 7,
           start_date: '2026-08-17',
           end_date: '2026-08-17',
           reason: 'test',
         }),
       ).rejects.toThrow(BadRequestException);
-
       expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
     });
 
-    it('rejects self-approval when approver_id equals the requester', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 1, isApprover: true });
-
-      await expect(
-        service.create(1, {
-          leave_type: LeaveType.annual,
-          approver_id: 1,
-          start_date: '2026-08-17',
-          end_date: '2026-08-17',
-          reason: 'test',
-        }),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
-    });
-
-    it('computes duration_days as weekday count and persists via Prisma', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 7, isApprover: true });
+    it('resolves the chain and persists LeaveApprovalStep rows via Prisma nested create', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        orgRole: 'MEMBER',
+        team: { leaderId: 7, department: { managerId: 8 } },
+        ledTeam: null,
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: 9 });
       prisma.leaveRequest.create.mockImplementation(({ data }) =>
         Promise.resolve({
           id: 1,
           ...data,
           user: { username: 'member', firstName: null, lastName: null },
-          approver: { username: 'admin', firstName: null, lastName: null },
           decidedBy: null,
+          approvalSteps: [],
           createdAt: new Date('2026-08-18T00:00:00Z'),
           updatedAt: new Date('2026-08-18T00:00:00Z'),
         }),
       );
 
-      // Mon 2026-08-17 .. Fri 2026-08-21 = 5 weekdays
+      // Mon 2026-08-17 .. Fri 2026-08-21 = 5 weekdays -> LEADER + MANAGER
       const result = await service.create(1, {
         leave_type: LeaveType.annual,
-        approver_id: 7,
         start_date: '2026-08-17',
         end_date: '2026-08-21',
         reason: 'test',
@@ -96,43 +89,19 @@ describe('LeaveService', () => {
 
       expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ durationDays: 5 }),
+          data: expect.objectContaining({
+            durationDays: 5,
+            approvalSteps: {
+              create: [
+                { level: 'LEADER', order: 0, approverId: 7 },
+                { level: 'MANAGER', order: 1, approverId: 8 },
+              ],
+            },
+          }),
         }),
       );
       expect(result.duration_days).toBe(5);
       expect(result.status).toBe('pending');
-    });
-
-    it('computes duration_days using UTC regardless of server local timezone', async () => {
-      const originalTz = process.env.TZ;
-      process.env.TZ = 'America/Los_Angeles';
-      try {
-        prisma.user.findUnique.mockResolvedValue({ id: 7, isApprover: true });
-        prisma.leaveRequest.create.mockImplementation(({ data }) =>
-          Promise.resolve({
-            id: 1,
-            ...data,
-            user: { username: 'member', firstName: null, lastName: null },
-            approver: { username: 'admin', firstName: null, lastName: null },
-            decidedBy: null,
-            createdAt: new Date('2026-08-18T00:00:00Z'),
-            updatedAt: new Date('2026-08-18T00:00:00Z'),
-          }),
-        );
-
-        // Mon 2026-08-17 .. Fri 2026-08-21 = 5 weekdays, even under a negative UTC offset
-        const result = await service.create(1, {
-          leave_type: LeaveType.annual,
-          approver_id: 7,
-          start_date: '2026-08-17',
-          end_date: '2026-08-21',
-          reason: 'test',
-        });
-
-        expect(result.duration_days).toBe(5);
-      } finally {
-        process.env.TZ = originalTz;
-      }
     });
   });
 

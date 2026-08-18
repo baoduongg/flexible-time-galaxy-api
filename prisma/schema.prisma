@@ -103,8 +103,8 @@ model LeaveRequest {
   attendanceDate DateTime?   @db.Date
   correctionTime String?
   status         LeaveStatus @default(pending)
-  approverId     Int
-  approver       User        @relation("LeaveApprover", fields: [approverId], references: [id])
+  approverId     Int?
+  approver       User?       @relation("LeaveApprover", fields: [approverId], references: [id])
   reason         String
   decidedAt      DateTime?
   decidedById    Int?

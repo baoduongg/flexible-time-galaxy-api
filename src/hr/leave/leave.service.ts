@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, Prisma } from '@prisma/client';
+import { LeaveStatus, LeaveType, OrgRole, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -17,6 +17,7 @@ import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ListLeaveQueryDto } from './dto/list-leave-query.dto';
 import { AdminListLeaveQueryDto } from './dto/admin-list-leave-query.dto';
+import { resolveApprovalChain, type OrgContext } from './leave-chain.util';
 
 // ponytail: mirrors LeaveBalance.totalDays @default(12), used until real balances are seeded per user
 const DEFAULT_ANNUAL_DAYS = 12;
@@ -29,21 +30,12 @@ export class LeaveService {
   ) {}
 
   async create(userId: number, dto: CreateLeaveRequestDto) {
-    const approver = await this.prisma.user.findUnique({
-      where: { id: dto.approver_id },
-    });
-
-    if (!approver || !approver.isApprover) {
-      throw new BadRequestException('Người duyệt không hợp lệ');
-    }
-    if (dto.approver_id === userId) {
-      throw new BadRequestException('Không thể tự duyệt đơn của mình');
-    }
-
     const durationDays = this.calculateDurationDays(
       dto.start_date,
       dto.end_date,
     );
+    const context = await this.buildOrgContext(userId);
+    const chain = resolveApprovalChain(context, durationDays);
 
     const created = await this.prisma.leaveRequest.create({
       data: {
@@ -57,13 +49,60 @@ export class LeaveService {
           : null,
         correctionTime: dto.correction_time ?? null,
         status: LeaveStatus.pending,
-        approverId: dto.approver_id,
         reason: dto.reason,
+        approvalSteps: {
+          create: chain.map((step, index) => ({
+            level: step.level,
+            order: index,
+            approverId: step.approverId,
+          })),
+        },
       },
       include: LEAVE_INCLUDE,
     });
 
     return toLeaveRequestResponse(created);
+  }
+
+  private async buildOrgContext(userId: number): Promise<OrgContext> {
+    const [requester, director] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          orgRole: true,
+          team: {
+            select: {
+              leaderId: true,
+              department: { select: { managerId: true } },
+            },
+          },
+          ledTeam: {
+            select: { department: { select: { managerId: true } } },
+          },
+        },
+      }),
+      this.prisma.user.findFirst({
+        where: { orgRole: OrgRole.DIRECTOR },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!requester) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    return {
+      id: requester.id,
+      orgRole: requester.orgRole,
+      leaderId: requester.team?.leaderId ?? null,
+      managerId:
+        requester.team?.department.managerId ??
+        requester.ledTeam?.department.managerId ??
+        null,
+      directorId: director?.id ?? null,
+    };
   }
 
   async listMine(userId: number, query: ListLeaveQueryDto) {
