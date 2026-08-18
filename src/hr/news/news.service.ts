@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { buildPaginationMeta, paginationSkip } from '../../common/utils/paginate.util';
+import { CreateNewsDto } from './dto/create-news.dto';
 import { ListNewsQueryDto } from './dto/list-news-query.dto';
+import { UpdateNewsDto } from './dto/update-news.dto';
 import { toNewsResponse } from './news.mapper';
 
 @Injectable()
@@ -35,5 +37,50 @@ export class NewsService {
       throw new NotFoundException('Không tìm thấy tin tức');
     }
     return toNewsResponse(news);
+  }
+
+  async create(dto: CreateNewsDto) {
+    const created = await this.prisma.news.create({
+      data: {
+        title: dto.title,
+        content: dto.content,
+        image: dto.image,
+        category: dto.category,
+        isNew: dto.is_new ?? true,
+      },
+    });
+
+    return toNewsResponse(created);
+  }
+
+  async update(id: number, dto: UpdateNewsDto) {
+    const existing = await this.prisma.news.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy tin tức');
+    }
+
+    const updated = await this.prisma.news.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        content: dto.content,
+        image: dto.image,
+        category: dto.category,
+        isNew: dto.is_new,
+      },
+    });
+
+    return toNewsResponse(updated);
+  }
+
+  async remove(id: number) {
+    const existing = await this.prisma.news.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy tin tức');
+    }
+
+    const deleted = await this.prisma.news.delete({ where: { id } });
+
+    return toNewsResponse(deleted);
   }
 }
