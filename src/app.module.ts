@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ApproversModule } from './hr/approvers/approvers.module';
 import { LeaveModule } from './hr/leave/leave.module';
+import { AttendanceModule } from './hr/attendance/attendance.module';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 
 @Module({
@@ -16,6 +17,7 @@ import { ResponseEnvelopeInterceptor } from './common/interceptors/response-enve
     AuthModule,
     ApproversModule,
     LeaveModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [
