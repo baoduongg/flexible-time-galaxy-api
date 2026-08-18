@@ -16,6 +16,9 @@ import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ListLeaveQueryDto } from './dto/list-leave-query.dto';
 
+// ponytail: mirrors LeaveBalance.totalDays @default(12), used until real balances are seeded per user
+const DEFAULT_ANNUAL_DAYS = 12;
+
 @Injectable()
 export class LeaveService {
   constructor(private readonly prisma: PrismaService) {}
@@ -27,6 +30,9 @@ export class LeaveService {
 
     if (!approver || !approver.isApprover) {
       throw new BadRequestException('Người duyệt không hợp lệ');
+    }
+    if (dto.approver_id === userId) {
+      throw new BadRequestException('Không thể tự duyệt đơn của mình');
     }
 
     const durationDays = this.calculateDurationDays(
@@ -128,14 +134,14 @@ export class LeaveService {
       }),
     ]);
 
-    const total = balance ? Number(balance.totalDays) : 0;
+    const total = balance ? Number(balance.totalDays) : DEFAULT_ANNUAL_DAYS;
     const used = Number(usedAgg._sum.durationDays ?? 0);
 
     return {
       year: targetYear,
       total,
       used,
-      remaining: Number((total - used).toFixed(2)),
+      remaining: Math.max(0, Number((total - used).toFixed(2))),
     };
   }
 
@@ -204,9 +210,9 @@ export class LeaveService {
     for (
       const cursor = new Date(start);
       cursor <= end;
-      cursor.setDate(cursor.getDate() + 1)
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
     ) {
-      const dayOfWeek = cursor.getDay();
+      const dayOfWeek = cursor.getUTCDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         days += 1;
       }

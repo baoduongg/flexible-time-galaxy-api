@@ -76,7 +76,6 @@ export class AttendanceService {
       this.prisma.leaveRequest.findMany({
         where: {
           userId,
-          leaveType: LeaveType.annual,
           status: LeaveStatus.approved,
           startDate: { lte: monthEnd },
           endDate: { gte: monthStart },

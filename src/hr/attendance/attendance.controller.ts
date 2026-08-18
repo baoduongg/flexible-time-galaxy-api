@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
@@ -11,11 +19,13 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('checkin')
+  @HttpCode(HttpStatus.OK)
   checkin(@CurrentUser() user: JwtPayload) {
     return this.attendanceService.checkin(user.sub);
   }
 
   @Post('checkout')
+  @HttpCode(HttpStatus.OK)
   checkout(@CurrentUser() user: JwtPayload) {
     return this.attendanceService.checkout(user.sub);
   }
