@@ -1,4 +1,13 @@
-import { Body, Controller, Param, ParseIntPipe, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -6,6 +15,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { DecideLeaveDto } from './dto/decide-leave.dto';
+import { AdminListLeaveQueryDto } from './dto/admin-list-leave-query.dto';
 import { LeaveService } from './leave.service';
 
 @Controller('admin/leave')
@@ -13,6 +23,16 @@ import { LeaveService } from './leave.service';
 @Roles(Role.ADMIN)
 export class LeaveAdminController {
   constructor(private readonly leaveService: LeaveService) {}
+
+  @Get()
+  findAll(@Query() query: AdminListLeaveQueryDto) {
+    return this.leaveService.listAllAdmin(query);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.leaveService.findOne(id);
+  }
 
   @Patch(':id/approve')
   approve(

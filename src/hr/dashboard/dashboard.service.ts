@@ -18,12 +18,16 @@ export class DashboardService {
 
     const [
       totalEmployees,
+      totalAdmins,
+      totalMembers,
       presentToday,
       pendingApprovals,
       onLeaveToday,
       pendingLeaveRequests,
     ] = await Promise.all([
       this.prisma.user.count(),
+      this.prisma.user.count({ where: { role: Role.ADMIN } }),
+      this.prisma.user.count({ where: { role: Role.MEMBER } }),
       this.prisma.attendance.count({
         where: { date: today, checkinTime: { not: null } },
       }),
@@ -65,6 +69,8 @@ export class DashboardService {
     return {
       team_statistics: {
         total_employees: totalEmployees,
+        total_admins: totalAdmins,
+        total_members: totalMembers,
         present: presentToday,
         absent: {
           total: absentApprovedCount + absentUnapprovedCount,

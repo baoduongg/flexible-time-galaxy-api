@@ -186,6 +186,36 @@ describe('LeaveService', () => {
     });
   });
 
+  describe('listAllAdmin', () => {
+    it('queries with search and status filters and paginates properly', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count.mockResolvedValue(0);
+
+      const result = await service.listAllAdmin({
+        page: 1,
+        page_size: 10,
+        status: LeaveStatus.pending,
+        search: 'john',
+      });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: LeaveStatus.pending,
+            OR: expect.arrayContaining([
+              { user: { firstName: { contains: 'john', mode: 'insensitive' } } },
+              { reason: { contains: 'john', mode: 'insensitive' } },
+            ]),
+          }),
+          skip: 0,
+          take: 10,
+        }),
+      );
+      expect(result.items).toEqual([]);
+      expect(result.meta.page).toBe(1);
+    });
+  });
+
   describe('getBalance', () => {
     it('computes remaining = total - used(approved annual leave)', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue({ totalDays: 12 });

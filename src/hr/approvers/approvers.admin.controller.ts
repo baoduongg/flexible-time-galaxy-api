@@ -8,7 +8,7 @@ import { ApproversService } from './approvers.service';
 @Controller('admin/approvers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
-export class ApproversController {
+export class ApproversAdminController {
   constructor(private readonly approversService: ApproversService) {}
 
   @Get()

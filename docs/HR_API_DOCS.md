@@ -225,6 +225,8 @@ Không phải API riêng — đây chính là `LeaveRequest` với `leave_type =
     "data": {
       "team_statistics": {
         "total_employees": 25,
+        "total_admins": 3,
+        "total_members": 22,
         "present": 20,
         "absent": { "total": 5, "approved": 3, "unapproved": 2 },
         "pending_approvals": 4

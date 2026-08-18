@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, Role } from '@prisma/client';
+import { LeaveStatus, LeaveType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -16,6 +16,7 @@ import { LEAVE_INCLUDE } from './leave.constants';
 import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ListLeaveQueryDto } from './dto/list-leave-query.dto';
+import { AdminListLeaveQueryDto } from './dto/admin-list-leave-query.dto';
 
 // ponytail: mirrors LeaveBalance.totalDays @default(12), used until real balances are seeded per user
 const DEFAULT_ANNUAL_DAYS = 12;
@@ -113,6 +114,62 @@ export class LeaveService {
     return {
       items: items.map(toLeaveRequestResponse),
       pending_count: pendingCount,
+      meta: buildPaginationMeta(total, page, pageSize),
+    };
+  }
+
+  async listAllAdmin(query: AdminListLeaveQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.page_size ?? query.limit ?? 20;
+
+    const where: Prisma.LeaveRequestWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.leave_type ? { leaveType: query.leave_type } : {}),
+      ...(query.user_id ? { userId: query.user_id } : {}),
+      ...(query.approver_id ? { approverId: query.approver_id } : {}),
+      ...(query.start_date
+        ? { startDate: { gte: new Date(query.start_date) } }
+        : {}),
+      ...(query.end_date
+        ? { endDate: { lte: new Date(query.end_date) } }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                user: {
+                  firstName: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              {
+                user: {
+                  lastName: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              {
+                user: {
+                  username: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              { reason: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.leaveRequest.findMany({
+        where,
+        include: LEAVE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+      this.prisma.leaveRequest.count({ where }),
+    ]);
+
+    return {
+      items: items.map(toLeaveRequestResponse),
       meta: buildPaginationMeta(total, page, pageSize),
     };
   }

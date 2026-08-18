@@ -26,7 +26,11 @@ describe('DashboardService', () => {
   });
 
   it('assembles admin team statistics', async () => {
-    prisma.user.count.mockResolvedValueOnce(25).mockResolvedValueOnce(25); // total, then again inside countUnapprovedAbsences
+    prisma.user.count
+      .mockResolvedValueOnce(25) // totalEmployees
+      .mockResolvedValueOnce(3) // totalAdmins
+      .mockResolvedValueOnce(22) // totalMembers
+      .mockResolvedValueOnce(25); // totalEmployees inside countUnapprovedAbsences
     prisma.attendance.count.mockResolvedValue(20);
     prisma.leaveRequest.count.mockResolvedValue(4);
     prisma.leaveRequest.findMany
@@ -49,6 +53,8 @@ describe('DashboardService', () => {
     const result = await service.admin();
 
     expect(result.team_statistics.total_employees).toBe(25);
+    expect(result.team_statistics.total_admins).toBe(3);
+    expect(result.team_statistics.total_members).toBe(22);
     expect(result.team_statistics.present).toBe(20);
     expect(result.team_statistics.pending_approvals).toBe(4);
     expect(result.absent_today).toEqual([
