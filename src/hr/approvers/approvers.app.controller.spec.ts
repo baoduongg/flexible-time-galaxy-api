@@ -1,7 +1,7 @@
 import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { ApproversAppController } from './approvers.app.controller';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 
 describe('ApproversAppController', () => {
   it('is mounted under app/approvers', () => {
@@ -12,6 +12,6 @@ describe('ApproversAppController', () => {
   it('requires an authenticated user (no role restriction)', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, ApproversAppController) as unknown[];
     expect(guards).toContain(JwtAuthGuard);
-    expect(guards).not.toContain(RolesGuard);
+    expect(guards).not.toContain(AdminGuard);
   });
 });
