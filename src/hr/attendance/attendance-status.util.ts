@@ -12,12 +12,16 @@ const LATE_THRESHOLD_1_MINUTES = 15;
 const LATE_THRESHOLD_2_MINUTES = 60;
 const WORK_START_HOUR_UTC = 1; // 08:00 GMT+7
 
-export type AttendanceStatusCode = 'X' | 'M1' | 'M2' | 'Ro' | 'P';
+export type AttendanceStatusCode = 'X' | 'M1' | 'M2' | 'Ro' | 'P' | 'L';
 
 export function deriveStatusCode(
   attendance: Pick<Attendance, 'checkinTime'> | undefined,
   onApprovedLeave: boolean,
+  isHoliday = false,
 ): AttendanceStatusCode {
+  if (isHoliday) {
+    return 'L';
+  }
   if (onApprovedLeave) {
     return 'P';
   }
@@ -51,14 +55,21 @@ export function buildAttendanceHistory(params: {
   attendances: Array<Pick<Attendance, 'date' | 'checkinTime'>>;
   approvedLeaveDates: Set<string>;
   feedbackByDate: Map<string, number>;
+  holidayDates: Set<string>;
 }): Array<{
   date: string;
   status_code: AttendanceStatusCode;
   has_feedback: boolean;
   feedback_request_id: number | null;
 }> {
-  const { year, month, attendances, approvedLeaveDates, feedbackByDate } =
-    params;
+  const {
+    year,
+    month,
+    attendances,
+    approvedLeaveDates,
+    feedbackByDate,
+    holidayDates,
+  } = params;
   const attendanceByDate = new Map(
     attendances.map((a) => [dateKey(a.date), a]),
   );
@@ -87,6 +98,7 @@ export function buildAttendanceHistory(params: {
     const statusCode = deriveStatusCode(
       attendanceByDate.get(key),
       approvedLeaveDates.has(key),
+      holidayDates.has(key),
     );
     const feedbackRequestId = feedbackByDate.get(key) ?? null;
 

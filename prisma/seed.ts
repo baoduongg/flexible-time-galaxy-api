@@ -34,6 +34,26 @@ async function main() {
 
     console.log(`Seeded user: ${account.username} (${account.role})`);
   }
+
+  const holidays = [
+    { date: new Date('2026-01-01'), name: 'Tết Dương lịch' },
+    { date: new Date('2026-02-16'), name: 'Tết Nguyên đán' },
+    { date: new Date('2026-02-17'), name: 'Tết Nguyên đán' },
+    { date: new Date('2026-02-18'), name: 'Tết Nguyên đán' },
+    { date: new Date('2026-04-30'), name: 'Ngày Giải phóng miền Nam' },
+    { date: new Date('2026-05-01'), name: 'Ngày Quốc tế Lao động' },
+    { date: new Date('2026-09-02'), name: 'Ngày Quốc khánh' },
+  ];
+
+  for (const holiday of holidays) {
+    await prisma.publicHoliday.upsert({
+      where: { date: holiday.date },
+      update: { name: holiday.name },
+      create: holiday,
+    });
+  }
+
+  console.log(`Seeded ${holidays.length} public holidays`);
 }
 
 main()

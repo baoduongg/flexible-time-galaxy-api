@@ -7,6 +7,7 @@ import {
 import { LeaveType, LeaveStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
+import { AttendanceService } from '../attendance/attendance.service';
 import { LeaveService } from './leave.service';
 
 describe('LeaveService', () => {
@@ -23,11 +24,16 @@ describe('LeaveService', () => {
     },
     leaveBalance: { findUnique: jest.fn() },
   };
+  const attendanceService = { applyCorrection: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     const module = await Test.createTestingModule({
-      providers: [LeaveService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        LeaveService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AttendanceService, useValue: attendanceService },
+      ],
     }).compile();
     service = module.get(LeaveService);
   });
@@ -345,6 +351,70 @@ describe('LeaveService', () => {
         }),
       );
       expect(result.status).toBe('approved');
+    });
+
+    it('does not write back to Attendance when approving a non-feedback request', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
+      prisma.leaveRequest.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...pendingLeave, ...data }),
+      );
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+
+      await service.approve(1, approver, 'ok');
+
+      expect(attendanceService.applyCorrection).not.toHaveBeenCalled();
+    });
+
+    it('writes the correction back to Attendance when approving a feedback request', async () => {
+      const feedbackLeave = {
+        ...pendingLeave,
+        leaveType: LeaveType.feedback,
+        attendanceDate: new Date('2026-08-10'),
+        correctionTime: '08:15',
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(feedbackLeave);
+      prisma.leaveRequest.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...feedbackLeave, ...data }),
+      );
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+
+      await service.approve(1, approver, 'ok');
+
+      expect(attendanceService.applyCorrection).toHaveBeenCalledWith(
+        1,
+        new Date('2026-08-10'),
+        '08:15',
+      );
+    });
+
+    it('does not write back to Attendance when rejecting a feedback request', async () => {
+      const feedbackLeave = {
+        ...pendingLeave,
+        leaveType: LeaveType.feedback,
+        attendanceDate: new Date('2026-08-10'),
+        correctionTime: '08:15',
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(feedbackLeave);
+      prisma.leaveRequest.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...feedbackLeave, ...data }),
+      );
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+
+      await service.reject(1, approver, 'không hợp lệ');
+
+      expect(attendanceService.applyCorrection).not.toHaveBeenCalled();
     });
   });
 });

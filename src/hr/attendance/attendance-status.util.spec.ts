@@ -26,6 +26,21 @@ describe('deriveStatusCode', () => {
     const veryLate = new Date(Date.UTC(2026, 7, 17, 2, 30, 0)); // 90 min late
     expect(deriveStatusCode({ checkinTime: veryLate }, false)).toBe('M2');
   });
+
+  it('returns L when the date is a public holiday', () => {
+    expect(deriveStatusCode(undefined, false, true)).toBe('L');
+  });
+
+  it('holiday takes priority over an approved leave', () => {
+    expect(deriveStatusCode(undefined, true, true)).toBe('L');
+  });
+
+  it('holiday takes priority over a check-in', () => {
+    const workStart = new Date(Date.UTC(2026, 7, 17, 1, 0, 0));
+    expect(deriveStatusCode({ checkinTime: workStart }, false, true)).toBe(
+      'L',
+    );
+  });
 });
 
 describe('buildAttendanceHistory', () => {
@@ -48,6 +63,7 @@ describe('buildAttendanceHistory', () => {
       attendances: [],
       approvedLeaveDates: new Set<string>(),
       feedbackByDate: new Map<string, number>(),
+      holidayDates: new Set<string>(),
     });
 
     global.Date = realNow;
@@ -57,6 +73,40 @@ describe('buildAttendanceHistory', () => {
       {
         date: '2026-08-03',
         status_code: 'Ro',
+        has_feedback: false,
+        feedback_request_id: null,
+      },
+    ]);
+  });
+
+  it('marks a weekday public holiday as L instead of the checkin-derived status', () => {
+    const realNow = Date;
+
+    global.Date = class extends realNow {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super('2026-08-03T00:00:00Z');
+        } else {
+          super(...(args as any));
+        }
+      }
+    } as never;
+
+    const rows = buildAttendanceHistory({
+      year: 2026,
+      month: 8,
+      attendances: [],
+      approvedLeaveDates: new Set<string>(),
+      feedbackByDate: new Map<string, number>(),
+      holidayDates: new Set(['2026-08-03']),
+    });
+
+    global.Date = realNow;
+
+    expect(rows).toEqual([
+      {
+        date: '2026-08-03',
+        status_code: 'L',
         has_feedback: false,
         feedback_request_id: null,
       },

@@ -102,6 +102,14 @@ model Attendance {
   @@index([date])
 }
 
+model PublicHoliday {
+  id   Int      @id @default(autoincrement())
+  date DateTime @unique @db.Date
+  name String
+
+  @@index([date])
+}
+
 model News {
   id          Int      @id @default(autoincrement())
   title       String

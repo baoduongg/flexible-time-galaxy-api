@@ -11,6 +11,7 @@ import {
   paginationSkip,
 } from '../../common/utils/paginate.util';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
+import { AttendanceService } from '../attendance/attendance.service';
 import { LEAVE_INCLUDE } from './leave.constants';
 import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
@@ -21,7 +22,10 @@ const DEFAULT_ANNUAL_DAYS = 12;
 
 @Injectable()
 export class LeaveService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly attendanceService: AttendanceService,
+  ) {}
 
   async create(userId: number, dto: CreateLeaveRequestDto) {
     const approver = await this.prisma.user.findUnique({
@@ -197,6 +201,19 @@ export class LeaveService {
       },
       include: LEAVE_INCLUDE,
     });
+
+    if (
+      status === LeaveStatus.approved &&
+      leave.leaveType === LeaveType.feedback &&
+      leave.attendanceDate &&
+      leave.correctionTime
+    ) {
+      await this.attendanceService.applyCorrection(
+        leave.userId,
+        leave.attendanceDate,
+        leave.correctionTime,
+      );
+    }
 
     return toLeaveRequestResponse(updated);
   }
