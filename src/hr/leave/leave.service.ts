@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, OrgRole, Prisma, Role } from '@prisma/client';
+import { LeaveStatus, LeaveType, OrgRole, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
