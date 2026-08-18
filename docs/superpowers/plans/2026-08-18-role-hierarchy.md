@@ -1634,12 +1634,32 @@ git commit -m "feat: add pure leave approval chain resolver"
 - Modify: `src/hr/leave/leave.mapper.ts`
 - Modify: `src/hr/leave/leave.service.ts`
 - Modify: `src/hr/leave/leave.service.spec.ts`
+- Modify: `prisma/schema.prisma`
+- Create: `prisma/migrations/<timestamp>_nullable_leave_approver/migration.sql` (generated)
 
 **Interfaces:**
 - Consumes: `resolveApprovalChain`, `OrgContext` from Task 6.
-- Produces: `LeaveService.create(userId, dto)` now creates `LeaveApprovalStep` rows instead of a flat `approverId`; `toLeaveRequestResponse(...)` now returns `approval_steps: [...]` instead of `approver_id`/`approver_name`. Task 8/9 read `leave.approvalSteps` — same field name.
+- Produces: `LeaveService.create(userId, dto)` now creates `LeaveApprovalStep` rows instead of a flat `approverId`; `toLeaveRequestResponse(...)` now returns `approval_steps: [...]` instead of `approver_id`/`approver_name`. Task 8/9 read `leave.approvalSteps` — same field name. `LeaveRequest.approverId`/`approver` become nullable (`Int?`/`User?`) — Task 12 drops them entirely later, this is an intermediate relaxation.
 
-- [ ] **Step 1: Drop `approver_id` from `CreateLeaveRequestDto`**
+- [ ] **Step 1: Make `LeaveRequest.approverId`/`approver` nullable**
+
+Task 1 left `LeaveRequest.approverId Int` (required) and `approver User @relation(...)` untouched, on the assumption nothing in this task would need to touch it. That assumption was wrong: `create()` below stops supplying `approverId` at all (the approver is now per-step, in `LeaveApprovalStep`, not per-request), and Prisma's generated `LeaveRequestCreateInput` requires a value for every non-nullable field with no default — omitting it would fail to compile. Relax the column to nullable now; Task 12's cleanup migration drops both fields entirely once Tasks 8/9 stop reading them, so this is a deliberately temporary intermediate state, not a design change.
+
+In `prisma/schema.prisma`, in `model LeaveRequest`, change:
+```prisma
+  approverId     Int
+  approver       User        @relation("LeaveApprover", fields: [approverId], references: [id])
+```
+to:
+```prisma
+  approverId     Int?
+  approver       User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+```
+
+Run: `npx prisma migrate dev --name nullable_leave_approver`
+Expected: generates and applies a migration that runs `ALTER TABLE "LeaveRequest" ALTER COLUMN "approverId" DROP NOT NULL;` (relaxing an existing column's constraint — no data loss, every existing row already has a non-null value). Confirm the generated SQL contains exactly that (no unexpected `DROP COLUMN`/`ADD COLUMN`).
+
+- [ ] **Step 2: Drop `approver_id` from `CreateLeaveRequestDto`**
 
 ```typescript
 import { LeaveType } from '@prisma/client';
@@ -1682,7 +1702,7 @@ export class CreateLeaveRequestDto {
 }
 ```
 
-- [ ] **Step 2: Update `LEAVE_INCLUDE`**
+- [ ] **Step 3: Update `LEAVE_INCLUDE`**
 
 In `src/hr/leave/leave.constants.ts`, replace the `approver` block with `approvalSteps`:
 
@@ -1705,7 +1725,7 @@ export const LEAVE_INCLUDE = {
 } satisfies Prisma.LeaveRequestInclude;
 ```
 
-- [ ] **Step 3: Update the mapper**
+- [ ] **Step 4: Update the mapper**
 
 In `src/hr/leave/leave.mapper.ts`, replace the `approver_id`/`approver_name` lines in `toLeaveRequestResponse` with:
 
@@ -1721,7 +1741,7 @@ In `src/hr/leave/leave.mapper.ts`, replace the `approver_id`/`approver_name` lin
 ```
 (placed where `approver_id`/`approver_name` used to sit, right before `reason`)
 
-- [ ] **Step 4: Update failing tests first — `leave.service.spec.ts` `create` block**
+- [ ] **Step 5: Update failing tests first — `leave.service.spec.ts` `create` block**
 
 First, update the `prisma` mock object declared near the top of the file (`const prisma = { user: { findUnique: jest.fn() }, ... }`) to add `findFirst`:
 
@@ -1813,12 +1833,12 @@ Then replace the whole `describe('create', ...)` block in `src/hr/leave/leave.se
 
 Remove the old `computes duration_days using UTC ...` timezone test from this block — its weekday-counting behavior is unrelated to approver resolution and stays covered indirectly; if you'd rather keep timezone coverage explicit, add it back with the same `prisma.user.findUnique`/`findFirst` mocks as the second test above.
 
-- [ ] **Step 5: Run to verify the new tests fail**
+- [ ] **Step 6: Run to verify the new tests fail**
 
 Run: `npx jest src/hr/leave/leave.service.spec.ts -t create`
 Expected: FAIL — `service.create` still expects `approver_id` in the DTO and queries `prisma.user.findUnique` differently.
 
-- [ ] **Step 6: Rewrite `LeaveService.create()`**
+- [ ] **Step 7: Rewrite `LeaveService.create()`**
 
 In `src/hr/leave/leave.service.ts`:
 - Change the import line to: `import { LeaveStatus, LeaveType, OrgRole, Prisma, Role } from '@prisma/client';` — add `OrgRole`, keep `Role` (it's still used at lines 94/247 until Tasks 8/9 rewrite them).
@@ -1899,20 +1919,20 @@ In `src/hr/leave/leave.service.ts`:
 
 Delete the old `approver`-validation block that used to sit at the top of `create` (the `this.prisma.user.findUnique({ where: { id: dto.approver_id } })` / `isApprover` checks) — it's fully replaced by `buildOrgContext` + `resolveApprovalChain`.
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 8: Run tests to verify they pass**
 
 Run: `npx jest src/hr/leave/leave.service.spec.ts -t create`
 Expected: PASS. (`listApproval`/`approve`/`reject` tests in the same file are still on the old flat-`approverId` shape — they'll fail until Tasks 8/9; that's expected here, don't fix them in this task.)
 
-- [ ] **Step 8: Build check**
+- [ ] **Step 9: Build check**
 
 Run: `npm run build`
-Expected: succeeds — `decide()`/`listApproval()` still compile against the old `approverId` field on `LeaveRequest`, which Task 1 left untouched.
+Expected: succeeds — `decide()`/`listApproval()` still read `leave.approverId`/`actor.isAdmin` (now nullable on the `LeaveRequest` side per Step 1 of this task) until Tasks 8/9 rewrite them to be step-based. TypeScript accepts a nullable `Int?` in the `!==`/`===` comparisons those methods already use unchanged.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/hr/leave/dto/create-leave-request.dto.ts src/hr/leave/leave.constants.ts src/hr/leave/leave.mapper.ts src/hr/leave/leave.service.ts src/hr/leave/leave.service.spec.ts
+git add prisma/schema.prisma prisma/migrations src/hr/leave/dto/create-leave-request.dto.ts src/hr/leave/leave.constants.ts src/hr/leave/leave.mapper.ts src/hr/leave/leave.service.ts src/hr/leave/leave.service.spec.ts
 git commit -m "feat: LeaveService.create() snapshots the resolved approval chain"
 ```
 
@@ -2779,8 +2799,14 @@ git commit -m "refactor: remove ApproversModule (approver is now resolved from o
 
 - [ ] **Step 1: Confirm nothing still references the fields being dropped**
 
-Run: `grep -rn "\.role\b\|Role\.ADMIN\|Role\.MEMBER\|isApprover\|approverTitle\|\.approverId\b" src --include="*.ts" | grep -v approvalSteps`
+Run: `grep -rn "\.role\b\|Role\.ADMIN\|Role\.MEMBER\|isApprover\|approverTitle" src --include="*.ts"`
 Expected: no output. If anything shows up, stop and fix it in place before touching the schema — it means an earlier task missed a reference.
+
+Then separately check `approverId` — this name is now shared by two different things: the `LeaveRequest.approverId` field you're about to drop, and `LeaveApprovalStep.approverId` (a different, unrelated field on a different model that stays untouched). A plain grep for `.approverId` matches both and can't tell them apart by text alone. Run:
+
+`grep -rn "\.approverId\b" src --include="*.ts"`
+
+Every match at this point should be `step.approverId`/`currentStep.approverId`/an object literal key on a `ChainStep`/`LeaveApprovalStep` value (from Tasks 6-9: `leave-chain.util.ts`, `leave.service.ts`'s `create`/`decideStep`/`listApproval`/`listAllAdmin`, `leave.mapper.ts`) — all `LeaveApprovalStep`/`ChainStep`, not `LeaveRequest`. That's expected and fine; do not "fix" these. Read each match and confirm none of them is `leave.approverId` or `leaveRequest.approverId` (direct property access on a `LeaveRequest`-shaped object) or a Prisma call writing/selecting a top-level `approverId` on `prisma.leaveRequest.*` outside the `approvalSteps` relation — if you find one of those, that's the real leftover reference to fix before proceeding.
 
 - [ ] **Step 2: Edit `prisma/schema.prisma`**
 
@@ -2798,9 +2824,10 @@ Remove the `Role` enum block entirely. In `model User`, remove these lines:
 
 In `model LeaveRequest`, remove:
 ```prisma
-  approverId     Int
-  approver       User        @relation("LeaveApprover", fields: [approverId], references: [id])
+  approverId     Int?
+  approver       User?       @relation("LeaveApprover", fields: [approverId], references: [id])
 ```
+(Task 7 relaxed these to nullable so `create()` could stop populating them — you're removing the nullable form, not the original required one.)
 and the index:
 ```prisma
   @@index([approverId])
