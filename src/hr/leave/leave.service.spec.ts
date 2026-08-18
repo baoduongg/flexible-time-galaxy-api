@@ -182,7 +182,12 @@ describe('LeaveService', () => {
             userId: 1,
             leaveType: LeaveType.annual,
             status: LeaveStatus.approved,
+            startDate: expect.objectContaining({
+              gte: new Date(Date.UTC(2026, 0, 1)),
+              lte: new Date(Date.UTC(2026, 11, 31)),
+            }),
           }),
+          _sum: { durationDays: true },
         }),
       );
     });
