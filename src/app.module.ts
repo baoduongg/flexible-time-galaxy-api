@@ -6,10 +6,17 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ApproversModule } from './hr/approvers/approvers.module';
+import { LeaveModule } from './hr/leave/leave.module';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, ApproversModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    AuthModule,
+    ApproversModule,
+    LeaveModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
