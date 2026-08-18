@@ -4,10 +4,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { startOfToday } from '../attendance/attendance-status.util';
 import { LEAVE_INCLUDE, LEAVE_TYPE_LABELS } from '../leave/leave.constants';
 import { displayName, toLeaveRequestResponse } from '../leave/leave.mapper';
+import { LeaveService } from '../leave/leave.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly leaveService: LeaveService,
+  ) {}
 
   async admin() {
     const today = startOfToday();
@@ -78,6 +82,23 @@ export class DashboardService {
         leave_type_label: LEAVE_TYPE_LABELS[leave.leaveType],
         avatar_initial: displayName(leave.user).charAt(0).toUpperCase(),
       })),
+    };
+  }
+
+  async member(userId: number) {
+    const [balance, recentRequests] = await Promise.all([
+      this.leaveService.getBalance(userId),
+      this.prisma.leaveRequest.findMany({
+        where: { userId },
+        include: LEAVE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+    ]);
+
+    return {
+      leave_balance: { total: balance.total, used: balance.used, remaining: balance.remaining },
+      recent_requests: recentRequests.map(toLeaveRequestResponse),
     };
   }
 

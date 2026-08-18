@@ -61,4 +61,15 @@ describe('DashboardService', () => {
       },
     ]);
   });
+
+  it('assembles member dashboard from LeaveService.getBalance + recent requests', async () => {
+    leaveService.getBalance.mockResolvedValue({ year: 2026, total: 12, used: 3.5, remaining: 8.5 });
+    prisma.leaveRequest.findMany.mockResolvedValue([]);
+
+    const result = await service.member(1);
+
+    expect(leaveService.getBalance).toHaveBeenCalledWith(1);
+    expect(result.leave_balance).toEqual({ total: 12, used: 3.5, remaining: 8.5 });
+    expect(result.recent_requests).toEqual([]);
+  });
 });
