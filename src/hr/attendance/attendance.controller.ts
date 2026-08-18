@@ -13,7 +13,7 @@ import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { AttendanceService } from './attendance.service';
 import { AttendanceHistoryQueryDto } from './dto/attendance-history-query.dto';
 
-@Controller('hr/attendance')
+@Controller('app/attendance')
 @UseGuards(JwtAuthGuard)
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}

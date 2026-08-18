@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
+import { HTTP_CODE_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { AttendanceController } from './attendance.controller';
 
 describe('AttendanceController', () => {
@@ -16,4 +16,9 @@ describe('AttendanceController', () => {
       expect(httpCode).toBe(HttpStatus.OK);
     },
   );
+
+  it('is mounted under app/attendance', () => {
+    const path = Reflect.getMetadata(PATH_METADATA, AttendanceController) as string;
+    expect(path).toBe('app/attendance');
+  });
 });
