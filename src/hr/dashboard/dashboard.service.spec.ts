@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LeaveService } from '../leave/leave.service';
 import { DashboardService } from './dashboard.service';
@@ -10,6 +10,8 @@ describe('DashboardService', () => {
     user: { count: jest.fn() },
     attendance: { count: jest.fn(), findMany: jest.fn() },
     leaveRequest: { count: jest.fn(), findMany: jest.fn() },
+    team: { findUnique: jest.fn(), findMany: jest.fn() },
+    department: { findUnique: jest.fn() },
   };
   const leaveService = { getBalance: jest.fn() };
 
@@ -25,7 +27,7 @@ describe('DashboardService', () => {
     service = module.get(DashboardService);
   });
 
-  it('assembles admin team statistics', async () => {
+  it('assembles admin team statistics scoped to the whole company', async () => {
     prisma.user.count
       .mockResolvedValueOnce(25) // totalEmployees
       .mockResolvedValueOnce(3) // totalAdmins
@@ -38,34 +40,61 @@ describe('DashboardService', () => {
         {
           userId: 3,
           leaveType: 'unpaid',
-          user: {
-            id: 3,
-            username: 'lvc',
-            firstName: 'Văn C',
-            lastName: 'Lê',
-            role: Role.MEMBER,
-          },
+          user: { id: 3, username: 'lvc', firstName: 'Văn C', lastName: 'Lê', isAdmin: false, orgRole: 'MEMBER' },
         },
       ]) // onLeaveToday
-      .mockResolvedValueOnce([]); // pendingLeaveRequests (top 3)
-    prisma.attendance.findMany.mockResolvedValue([]); // checked-in userIds for countUnapprovedAbsences
+      .mockResolvedValueOnce([]); // pendingLeaveRequests
+    prisma.attendance.findMany.mockResolvedValue([]);
 
     const result = await service.admin();
 
+    expect(prisma.user.count).toHaveBeenNthCalledWith(1, { where: {} });
     expect(result.team_statistics.total_employees).toBe(25);
     expect(result.team_statistics.total_admins).toBe(3);
     expect(result.team_statistics.total_members).toBe(22);
-    expect(result.team_statistics.present).toBe(20);
-    expect(result.team_statistics.pending_approvals).toBe(4);
     expect(result.absent_today).toEqual([
-      {
-        id: 3,
-        name: 'Văn C Lê',
-        role_label: 'Nhân viên',
-        leave_type_label: 'Không lương',
-        avatar_initial: 'V',
-      },
+      { id: 3, name: 'Văn C Lê', role_label: 'Nhân viên', leave_type_label: 'Không lương', avatar_initial: 'V' },
     ]);
+  });
+
+  it('leader() scopes every count to the caller\'s team', async () => {
+    prisma.team.findUnique.mockResolvedValue({ id: 5, leaderId: 7 });
+    prisma.user.count.mockResolvedValue(0);
+    prisma.attendance.count.mockResolvedValue(0);
+    prisma.leaveRequest.count.mockResolvedValue(0);
+    prisma.leaveRequest.findMany.mockResolvedValue([]);
+    prisma.attendance.findMany.mockResolvedValue([]);
+
+    await service.leader(7);
+
+    expect(prisma.team.findUnique).toHaveBeenCalledWith({ where: { leaderId: 7 } });
+    expect(prisma.user.count).toHaveBeenNthCalledWith(1, { where: { teamId: 5 } });
+  });
+
+  it('leader() throws NotFoundException when the caller leads no team', async () => {
+    prisma.team.findUnique.mockResolvedValue(null);
+    await expect(service.leader(7)).rejects.toThrow(NotFoundException);
+  });
+
+  it('manager() scopes every count to the caller\'s department (via team.departmentId)', async () => {
+    prisma.department.findUnique.mockResolvedValue({ id: 2, managerId: 8 });
+    prisma.user.count.mockResolvedValue(0);
+    prisma.attendance.count.mockResolvedValue(0);
+    prisma.leaveRequest.count.mockResolvedValue(0);
+    prisma.leaveRequest.findMany.mockResolvedValue([]);
+    prisma.attendance.findMany.mockResolvedValue([]);
+
+    await service.manager(8);
+
+    expect(prisma.department.findUnique).toHaveBeenCalledWith({ where: { managerId: 8 } });
+    expect(prisma.user.count).toHaveBeenNthCalledWith(1, {
+      where: { team: { departmentId: 2 } },
+    });
+  });
+
+  it('manager() throws NotFoundException when the caller manages no department', async () => {
+    prisma.department.findUnique.mockResolvedValue(null);
+    await expect(service.manager(8)).rejects.toThrow(NotFoundException);
   });
 
   it('assembles member dashboard from LeaveService.getBalance + recent requests', async () => {

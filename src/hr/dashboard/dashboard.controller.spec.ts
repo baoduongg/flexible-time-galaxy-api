@@ -3,6 +3,7 @@ import { DashboardAppController } from './dashboard.app.controller';
 import { DashboardAdminController } from './dashboard.admin.controller';
 import { AdminGuard } from '../../auth/guards/admin.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { OrgRoleGuard } from '../../auth/guards/org-role.guard';
 
 describe('DashboardAppController', () => {
   it('is mounted under app/dashboard with no admin guard', () => {
@@ -24,5 +25,13 @@ describe('DashboardAdminController', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, DashboardAdminController) as unknown[];
     expect(guards).toContain(AdminGuard);
     expect(guards).toContain(JwtAuthGuard);
+  });
+});
+
+describe('DashboardAppController org-scoped routes', () => {
+  it('gates leader/manager behind OrgRoleGuard', () => {
+    const guards =
+      (Reflect.getMetadata(GUARDS_METADATA, DashboardAppController.prototype.leader) as unknown[]) ?? [];
+    expect(guards).toContain(OrgRoleGuard);
   });
 });
