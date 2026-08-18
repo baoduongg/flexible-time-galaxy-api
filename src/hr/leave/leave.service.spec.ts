@@ -127,4 +127,24 @@ describe('LeaveService', () => {
       );
     });
   });
+
+  describe('getBalance', () => {
+    it('computes remaining = total - used(approved annual leave)', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue({ totalDays: 12 });
+      prisma.leaveRequest.aggregate.mockResolvedValue({ _sum: { durationDays: 3.5 } });
+
+      const result = await service.getBalance(1, 2026);
+
+      expect(result).toEqual({ year: 2026, total: 12, used: 3.5, remaining: 8.5 });
+    });
+
+    it('defaults total to 0 when no LeaveBalance row exists yet', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue(null);
+      prisma.leaveRequest.aggregate.mockResolvedValue({ _sum: { durationDays: null } });
+
+      const result = await service.getBalance(1, 2026);
+
+      expect(result).toEqual({ year: 2026, total: 0, used: 0, remaining: 0 });
+    });
+  });
 });

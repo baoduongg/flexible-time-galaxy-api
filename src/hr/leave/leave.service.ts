@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { LeaveStatus, Role } from '@prisma/client';
+import { LeaveStatus, LeaveType, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -99,6 +99,38 @@ export class LeaveService {
       items: items.map(toLeaveRequestResponse),
       pending_count: pendingCount,
       meta: buildPaginationMeta(total, page, pageSize),
+    };
+  }
+
+  async getBalance(userId: number, year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+
+    const [balance, usedAgg] = await Promise.all([
+      this.prisma.leaveBalance.findUnique({
+        where: { userId_year: { userId, year: targetYear } },
+      }),
+      this.prisma.leaveRequest.aggregate({
+        where: {
+          userId,
+          leaveType: LeaveType.annual,
+          status: LeaveStatus.approved,
+          startDate: {
+            gte: new Date(Date.UTC(targetYear, 0, 1)),
+            lte: new Date(Date.UTC(targetYear, 11, 31)),
+          },
+        },
+        _sum: { durationDays: true },
+      }),
+    ]);
+
+    const total = balance ? Number(balance.totalDays) : 0;
+    const used = Number(usedAgg._sum.durationDays ?? 0);
+
+    return {
+      year: targetYear,
+      total,
+      used,
+      remaining: Number((total - used).toFixed(2)),
     };
   }
 
