@@ -18,9 +18,9 @@ import { LeaveBalanceQueryDto } from './dto/leave-balance-query.dto';
 import { DecideLeaveDto } from './dto/decide-leave.dto';
 import { LeaveService } from './leave.service';
 
-@Controller('hr/leave')
+@Controller('app/leave')
 @UseGuards(JwtAuthGuard)
-export class LeaveController {
+export class LeaveAppController {
   constructor(private readonly leaveService: LeaveService) {}
 
   @Post()
