@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { LeaveStatus, LeaveType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { startOfToday } from './attendance-status.util';
+import { buildAttendanceHistory, startOfToday } from './attendance-status.util';
 
 @Injectable()
 export class AttendanceService {
@@ -22,7 +23,10 @@ export class AttendanceService {
       update: { checkinTime: new Date() },
     });
 
-    return { checkin_time: record.checkinTime, checkout_time: record.checkoutTime };
+    return {
+      checkin_time: record.checkinTime,
+      checkout_time: record.checkoutTime,
+    };
   }
 
   async checkout(userId: number) {
@@ -43,7 +47,10 @@ export class AttendanceService {
       data: { checkoutTime: new Date() },
     });
 
-    return { checkin_time: record.checkinTime, checkout_time: record.checkoutTime };
+    return {
+      checkin_time: record.checkinTime,
+      checkout_time: record.checkoutTime,
+    };
   }
 
   async today(userId: number) {
@@ -56,5 +63,63 @@ export class AttendanceService {
       checkin_time: record?.checkinTime ?? null,
       checkout_time: record?.checkoutTime ?? null,
     };
+  }
+
+  async getHistory(userId: number, year: number, month: number) {
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 0));
+
+    const [attendances, approvedLeaves, feedbackRequests] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: { userId, date: { gte: monthStart, lte: monthEnd } },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          userId,
+          leaveType: LeaveType.annual,
+          status: LeaveStatus.approved,
+          startDate: { lte: monthEnd },
+          endDate: { gte: monthStart },
+        },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          userId,
+          leaveType: LeaveType.feedback,
+          attendanceDate: { gte: monthStart, lte: monthEnd },
+        },
+      }),
+    ]);
+
+    const approvedLeaveDates = new Set<string>();
+    for (const leave of approvedLeaves) {
+      for (
+        const cursor = new Date(
+          Math.max(leave.startDate.getTime(), monthStart.getTime()),
+        );
+        cursor <= leave.endDate && cursor <= monthEnd;
+        cursor.setUTCDate(cursor.getUTCDate() + 1)
+      ) {
+        approvedLeaveDates.add(cursor.toISOString().slice(0, 10));
+      }
+    }
+
+    const feedbackByDate = new Map<string, number>();
+    for (const feedback of feedbackRequests) {
+      if (feedback.attendanceDate) {
+        feedbackByDate.set(
+          feedback.attendanceDate.toISOString().slice(0, 10),
+          feedback.id,
+        );
+      }
+    }
+
+    return buildAttendanceHistory({
+      year,
+      month,
+      attendances,
+      approvedLeaveDates,
+      feedbackByDate,
+    });
   }
 }
