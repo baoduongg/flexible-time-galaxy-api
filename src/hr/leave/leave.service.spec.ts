@@ -121,34 +121,29 @@ describe('LeaveService', () => {
   });
 
   describe('listApproval', () => {
-    it('scopes non-admins to their own approverId and returns pending_count', async () => {
+    it('scopes non-admins to requests with a pending step assigned to them', async () => {
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.leaveRequest.count
         .mockResolvedValueOnce(0)
         .mockResolvedValueOnce(3);
 
-      const approver: JwtPayload = {
-        sub: 7,
-        username: 'manager',
-        isAdmin: false,
-        orgRole: 'MEMBER',
-      };
-      const result = await service.listApproval(approver, {
-        page: 1,
-        page_size: 20,
-      });
+      const approver: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const result = await service.listApproval(approver, { page: 1, page_size: 20 });
 
+      const expectedScope = {
+        approvalSteps: { some: { approverId: 7, status: 'pending' } },
+      };
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { approverId: 7 } }),
+        expect.objectContaining({ where: expectedScope }),
       );
       expect(result.pending_count).toBe(3);
     });
 
-    it('lets admins see every approver scope', async () => {
+    it('lets isAdmin actors see every request', async () => {
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.leaveRequest.count.mockResolvedValue(0);
 
-      const admin: JwtPayload = { sub: 1, username: 'admin', isAdmin: true, orgRole: 'MEMBER' };
+      const admin: JwtPayload = { sub: 1, username: 'admin', isAdmin: true, orgRole: 'MEMBER' } as JwtPayload;
       await service.listApproval(admin, { page: 1, page_size: 20 });
 
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
@@ -184,6 +179,21 @@ describe('LeaveService', () => {
       );
       expect(result.items).toEqual([]);
       expect(result.meta.page).toBe(1);
+    });
+
+    it('filters by approver_id against any approval step (not just pending)', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count.mockResolvedValue(0);
+
+      await service.listAllAdmin({ page: 1, page_size: 10, approver_id: 7 });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            approvalSteps: { some: { approverId: 7 } },
+          }),
+        }),
+      );
     });
   });
 

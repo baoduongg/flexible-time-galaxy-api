@@ -136,8 +136,15 @@ export class LeaveService {
   async listApproval(user: JwtPayload, query: ListLeaveQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.page_size ?? 20;
-    const scope = user.isAdmin ? {} : { approverId: user.sub };
-    const where = {
+
+    const scope: Prisma.LeaveRequestWhereInput = user.isAdmin
+      ? {}
+      : {
+          approvalSteps: {
+            some: { approverId: user.sub, status: ApprovalStepStatus.pending },
+          },
+        };
+    const where: Prisma.LeaveRequestWhereInput = {
       ...scope,
       ...(query.status ? { status: query.status } : {}),
     };
@@ -171,7 +178,9 @@ export class LeaveService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.leave_type ? { leaveType: query.leave_type } : {}),
       ...(query.user_id ? { userId: query.user_id } : {}),
-      ...(query.approver_id ? { approverId: query.approver_id } : {}),
+      ...(query.approver_id
+        ? { approvalSteps: { some: { approverId: query.approver_id } } }
+        : {}),
       ...(query.start_date
         ? { startDate: { gte: new Date(query.start_date) } }
         : {}),
