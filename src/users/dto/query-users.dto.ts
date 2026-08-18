@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import { OrgRole } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -20,6 +20,6 @@ export class QueryUsersDto {
   search?: string;
 
   @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
+  @IsEnum(OrgRole)
+  org_role?: OrgRole;
 }

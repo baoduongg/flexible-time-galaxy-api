@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { buildPaginationMeta, paginationSkip } from '../../common/utils/paginate.util';
+import {
+  buildPaginationMeta,
+  paginationSkip,
+} from '../../common/utils/paginate.util';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { ListNewsQueryDto } from './dto/list-news-query.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';

@@ -8,10 +8,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { Roles } from '../../auth/decorators/roles.decorator';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { DecideLeaveDto } from './dto/decide-leave.dto';
@@ -19,8 +17,7 @@ import { AdminListLeaveQueryDto } from './dto/admin-list-leave-query.dto';
 import { LeaveService } from './leave.service';
 
 @Controller('admin/leave')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
+@UseGuards(JwtAuthGuard, AdminGuard)
 export class LeaveAdminController {
   constructor(private readonly leaveService: LeaveService) {}
 

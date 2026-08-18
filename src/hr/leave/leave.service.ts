@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, Prisma, Role } from '@prisma/client';
+import {
+  ApprovalStepStatus,
+  LeaveStatus,
+  LeaveType,
+  OrgRole,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -17,6 +23,7 @@ import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ListLeaveQueryDto } from './dto/list-leave-query.dto';
 import { AdminListLeaveQueryDto } from './dto/admin-list-leave-query.dto';
+import { resolveApprovalChain, type OrgContext } from './leave-chain.util';
 
 // ponytail: mirrors LeaveBalance.totalDays @default(12), used until real balances are seeded per user
 const DEFAULT_ANNUAL_DAYS = 12;
@@ -29,21 +36,12 @@ export class LeaveService {
   ) {}
 
   async create(userId: number, dto: CreateLeaveRequestDto) {
-    const approver = await this.prisma.user.findUnique({
-      where: { id: dto.approver_id },
-    });
-
-    if (!approver || !approver.isApprover) {
-      throw new BadRequestException('Người duyệt không hợp lệ');
-    }
-    if (dto.approver_id === userId) {
-      throw new BadRequestException('Không thể tự duyệt đơn của mình');
-    }
-
     const durationDays = this.calculateDurationDays(
       dto.start_date,
       dto.end_date,
     );
+    const context = await this.buildOrgContext(userId);
+    const chain = resolveApprovalChain(context, durationDays);
 
     const created = await this.prisma.leaveRequest.create({
       data: {
@@ -57,13 +55,60 @@ export class LeaveService {
           : null,
         correctionTime: dto.correction_time ?? null,
         status: LeaveStatus.pending,
-        approverId: dto.approver_id,
         reason: dto.reason,
+        approvalSteps: {
+          create: chain.map((step, index) => ({
+            level: step.level,
+            order: index,
+            approverId: step.approverId,
+          })),
+        },
       },
       include: LEAVE_INCLUDE,
     });
 
     return toLeaveRequestResponse(created);
+  }
+
+  private async buildOrgContext(userId: number): Promise<OrgContext> {
+    const [requester, director] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          orgRole: true,
+          team: {
+            select: {
+              leaderId: true,
+              department: { select: { managerId: true } },
+            },
+          },
+          ledTeam: {
+            select: { department: { select: { managerId: true } } },
+          },
+        },
+      }),
+      this.prisma.user.findFirst({
+        where: { orgRole: OrgRole.DIRECTOR },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!requester) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    return {
+      id: requester.id,
+      orgRole: requester.orgRole,
+      leaderId: requester.team?.leaderId ?? null,
+      managerId:
+        requester.team?.department.managerId ??
+        requester.ledTeam?.department.managerId ??
+        null,
+      directorId: director?.id ?? null,
+    };
   }
 
   async listMine(userId: number, query: ListLeaveQueryDto) {
@@ -91,8 +136,16 @@ export class LeaveService {
   async listApproval(user: JwtPayload, query: ListLeaveQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.page_size ?? 20;
-    const scope = user.role === Role.ADMIN ? {} : { approverId: user.sub };
-    const where = {
+
+    const scope: Prisma.LeaveRequestWhereInput = user.isAdmin
+      ? { status: LeaveStatus.pending }
+      : {
+          approvalSteps: {
+            some: { approverId: user.sub, status: ApprovalStepStatus.pending },
+          },
+          status: LeaveStatus.pending,
+        };
+    const where: Prisma.LeaveRequestWhereInput = {
       ...scope,
       ...(query.status ? { status: query.status } : {}),
     };
@@ -126,13 +179,13 @@ export class LeaveService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.leave_type ? { leaveType: query.leave_type } : {}),
       ...(query.user_id ? { userId: query.user_id } : {}),
-      ...(query.approver_id ? { approverId: query.approver_id } : {}),
+      ...(query.approver_id
+        ? { approvalSteps: { some: { approverId: query.approver_id } } }
+        : {}),
       ...(query.start_date
         ? { startDate: { gte: new Date(query.start_date) } }
         : {}),
-      ...(query.end_date
-        ? { endDate: { lte: new Date(query.end_date) } }
-        : {}),
+      ...(query.end_date ? { endDate: { lte: new Date(query.end_date) } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -220,23 +273,27 @@ export class LeaveService {
   }
 
   async approve(id: number, actor: JwtPayload, note?: string) {
-    return this.decide(id, actor, LeaveStatus.approved, note);
+    return this.decideStep(id, actor, ApprovalStepStatus.approved, note);
   }
 
   async reject(id: number, actor: JwtPayload, note?: string) {
     if (!note) {
       throw new BadRequestException('note bắt buộc khi từ chối đơn');
     }
-    return this.decide(id, actor, LeaveStatus.rejected, note);
+    return this.decideStep(id, actor, ApprovalStepStatus.rejected, note);
   }
 
-  private async decide(
+  private async decideStep(
     id: number,
     actor: JwtPayload,
-    status: typeof LeaveStatus.approved | typeof LeaveStatus.rejected,
+    decision:
+      typeof ApprovalStepStatus.approved | typeof ApprovalStepStatus.rejected,
     note?: string,
   ) {
-    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
+    const leave = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { approvalSteps: { orderBy: { order: 'asc' } } },
+    });
 
     if (!leave) {
       throw new NotFoundException('Không tìm thấy đơn nghỉ phép');
@@ -244,23 +301,54 @@ export class LeaveService {
     if (leave.status !== LeaveStatus.pending) {
       throw new BadRequestException('Đơn đã được xử lý');
     }
-    if (leave.approverId !== actor.sub && actor.role !== Role.ADMIN) {
+
+    const currentStep = leave.approvalSteps.find(
+      (step) => step.status === ApprovalStepStatus.pending,
+    );
+    // ponytail: legacy rows created before the org-hierarchy migration have
+    // zero approvalSteps and can never surface a pending step — only an
+    // admin can decide them directly, since there's no real approver chain.
+    const isLegacyAdminOverride =
+      !currentStep && leave.approvalSteps.length === 0 && actor.isAdmin;
+    if (!currentStep && !isLegacyAdminOverride) {
+      throw new BadRequestException('Đơn đã được xử lý');
+    }
+    if (currentStep && currentStep.approverId !== actor.sub && !actor.isAdmin) {
       throw new ForbiddenException('Không có quyền duyệt đơn này');
     }
 
+    if (currentStep) {
+      await this.prisma.leaveApprovalStep.update({
+        where: { id: currentStep.id },
+        data: { status: decision, note: note ?? null, decidedAt: new Date() },
+      });
+    }
+
+    const isLastStep = currentStep
+      ? currentStep.order === leave.approvalSteps.length - 1
+      : true;
+    const finalStatus =
+      decision === ApprovalStepStatus.rejected
+        ? LeaveStatus.rejected
+        : isLastStep
+          ? LeaveStatus.approved
+          : null;
+
     const updated = await this.prisma.leaveRequest.update({
       where: { id },
-      data: {
-        status,
-        decidedAt: new Date(),
-        decidedById: actor.sub,
-        decisionNote: note ?? null,
-      },
+      data: finalStatus
+        ? {
+            status: finalStatus,
+            decidedAt: new Date(),
+            decidedById: actor.sub,
+            decisionNote: note ?? null,
+          }
+        : {},
       include: LEAVE_INCLUDE,
     });
 
     if (
-      status === LeaveStatus.approved &&
+      finalStatus === LeaveStatus.approved &&
       leave.leaveType === LeaveType.feedback &&
       leave.attendanceDate &&
       leave.correctionTime

@@ -11,9 +11,11 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  ADMIN
+enum OrgRole {
   MEMBER
+  LEADER
+  MANAGER
+  DIRECTOR
 }
 
 enum LeaveType {
@@ -29,6 +31,12 @@ enum LeaveStatus {
   rejected
 }
 
+enum ApprovalStepStatus {
+  pending
+  approved
+  rejected
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
@@ -36,18 +44,42 @@ model User {
   email     String?
   firstName String?
   lastName  String?
-  role      Role     @default(MEMBER)
+  isAdmin   Boolean  @default(false)
+  orgRole   OrgRole  @default(MEMBER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  isApprover    Boolean @default(false)
-  approverTitle String?
+  teamId Int?
+  team   Team? @relation("TeamMembers", fields: [teamId], references: [id])
 
-  leaveRequestsAsRequester LeaveRequest[] @relation("LeaveRequester")
-  leaveRequestsAsApprover  LeaveRequest[] @relation("LeaveApprover")
-  leaveRequestsAsDecider   LeaveRequest[] @relation("LeaveDecider")
+  ledTeam     Team?       @relation("TeamLeader")
+  managedDept Department? @relation("DepartmentManager")
+
+  leaveRequestsAsRequester LeaveRequest[]      @relation("LeaveRequester")
+  leaveRequestsAsDecider   LeaveRequest[]      @relation("LeaveDecider")
+  approvalStepsAsApprover  LeaveApprovalStep[]
   leaveBalances            LeaveBalance[]
   attendances              Attendance[]
+}
+
+model Team {
+  id           Int        @id @default(autoincrement())
+  name         String
+  leaderId     Int        @unique
+  leader       User       @relation("TeamLeader", fields: [leaderId], references: [id])
+  departmentId Int
+  department   Department @relation(fields: [departmentId], references: [id])
+  members      User[]     @relation("TeamMembers")
+
+  @@index([departmentId])
+}
+
+model Department {
+  id        Int    @id @default(autoincrement())
+  name      String
+  managerId Int    @unique
+  manager   User   @relation("DepartmentManager", fields: [managerId], references: [id])
+  teams     Team[]
 }
 
 model LeaveRequest {
@@ -61,8 +93,6 @@ model LeaveRequest {
   attendanceDate DateTime?   @db.Date
   correctionTime String?
   status         LeaveStatus @default(pending)
-  approverId     Int
-  approver       User        @relation("LeaveApprover", fields: [approverId], references: [id])
   reason         String
   decidedAt      DateTime?
   decidedById    Int?
@@ -71,9 +101,26 @@ model LeaveRequest {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  approvalSteps LeaveApprovalStep[]
+
   @@index([userId])
-  @@index([approverId])
   @@index([status])
+}
+
+model LeaveApprovalStep {
+  id             Int                @id @default(autoincrement())
+  leaveRequestId Int
+  leaveRequest   LeaveRequest       @relation(fields: [leaveRequestId], references: [id])
+  level          OrgRole
+  order          Int
+  approverId     Int?
+  approver       User?              @relation(fields: [approverId], references: [id])
+  status         ApprovalStepStatus @default(pending)
+  note           String?
+  decidedAt      DateTime?
+
+  @@index([leaveRequestId])
+  @@index([approverId, status])
 }
 
 model LeaveBalance {

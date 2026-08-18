@@ -29,7 +29,11 @@ describe('NewsService', () => {
       prisma.news.findMany.mockResolvedValue([]);
       prisma.news.count.mockResolvedValue(0);
 
-      const result = await service.findAll({ category: 'Thông báo', page: 1, page_size: 20 });
+      const result = await service.findAll({
+        category: 'Thông báo',
+        page: 1,
+        page_size: 20,
+      });
 
       expect(prisma.news.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { category: 'Thông báo' } }),
@@ -89,7 +93,9 @@ describe('NewsService', () => {
       await service.create({ title: 't', content: 'c', is_new: false });
 
       expect(prisma.news.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ isNew: false }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ isNew: false }),
+        }),
       );
     });
   });

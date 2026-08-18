@@ -1,7 +1,9 @@
-import { Role } from '@prisma/client';
+import { OrgRole } from '@prisma/client';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   MinLength,
@@ -26,6 +28,14 @@ export class UpdateUserDto {
   lastName?: string;
 
   @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
+  @IsBoolean()
+  is_admin?: boolean;
+
+  @IsOptional()
+  @IsEnum(OrgRole)
+  org_role?: OrgRole;
+
+  @IsOptional()
+  @IsInt()
+  team_id?: number;
 }

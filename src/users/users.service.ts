@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { OrgRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -15,7 +17,9 @@ const USER_SELECT = {
   email: true,
   firstName: true,
   lastName: true,
-  role: true,
+  isAdmin: true,
+  orgRole: true,
+  teamId: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -29,14 +33,31 @@ export class UsersService {
     const limit = query.limit ?? 10;
 
     const where = {
-      ...(query.role ? { role: query.role } : {}),
+      ...(query.org_role ? { orgRole: query.org_role } : {}),
       ...(query.search
         ? {
             OR: [
-              { username: { contains: query.search, mode: 'insensitive' as const } },
-              { email: { contains: query.search, mode: 'insensitive' as const } },
-              { firstName: { contains: query.search, mode: 'insensitive' as const } },
-              { lastName: { contains: query.search, mode: 'insensitive' as const } },
+              {
+                username: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                email: { contains: query.search, mode: 'insensitive' as const },
+              },
+              {
+                firstName: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                lastName: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
             ],
           }
         : {}),
@@ -95,7 +116,9 @@ export class UsersService {
         email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        role: dto.role,
+        isAdmin: dto.is_admin ?? false,
+        orgRole: dto.org_role ?? OrgRole.MEMBER,
+        teamId: dto.team_id,
       },
       select: USER_SELECT,
     });
@@ -107,8 +130,15 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id },
       data: {
-        ...dto,
-        password: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.firstName !== undefined ? { firstName: dto.firstName } : {}),
+        ...(dto.lastName !== undefined ? { lastName: dto.lastName } : {}),
+        ...(dto.is_admin !== undefined ? { isAdmin: dto.is_admin } : {}),
+        ...(dto.org_role !== undefined ? { orgRole: dto.org_role } : {}),
+        ...(dto.team_id !== undefined ? { teamId: dto.team_id } : {}),
+        password: dto.password
+          ? await bcrypt.hash(dto.password, 10)
+          : undefined,
       },
       select: USER_SELECT,
     });
@@ -116,6 +146,29 @@ export class UsersService {
 
   async remove(id: number) {
     await this.findOne(id);
+
+    const [ledTeam, managedDept] = await Promise.all([
+      this.prisma.team.findUnique({
+        where: { leaderId: id },
+        select: { name: true },
+      }),
+      this.prisma.department.findUnique({
+        where: { managerId: id },
+        select: { name: true },
+      }),
+    ]);
+
+    if (ledTeam) {
+      throw new BadRequestException(
+        `Không thể xóa: user đang là Trưởng nhóm của team ${ledTeam.name}, hãy đổi Trưởng nhóm trước`,
+      );
+    }
+    if (managedDept) {
+      throw new BadRequestException(
+        `Không thể xóa: user đang là Trưởng phòng của phòng ban ${managedDept.name}, hãy đổi Trưởng phòng trước`,
+      );
+    }
+
     await this.prisma.user.delete({ where: { id } });
     return { id };
   }

@@ -12,10 +12,15 @@ export const LEAVE_INCLUDE = {
   user: {
     select: { id: true, username: true, firstName: true, lastName: true },
   },
-  approver: {
-    select: { id: true, username: true, firstName: true, lastName: true },
-  },
   decidedBy: {
     select: { id: true, username: true, firstName: true, lastName: true },
+  },
+  approvalSteps: {
+    orderBy: { order: 'asc' },
+    include: {
+      approver: {
+        select: { id: true, username: true, firstName: true, lastName: true },
+      },
+    },
   },
 } satisfies Prisma.LeaveRequestInclude;

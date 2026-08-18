@@ -2,7 +2,6 @@ import { LeaveType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
-  IsInt,
   IsNotEmpty,
   IsString,
   MaxLength,
@@ -12,9 +11,6 @@ import {
 export class CreateLeaveRequestDto {
   @IsEnum(LeaveType)
   leave_type: LeaveType;
-
-  @IsInt()
-  approver_id: number;
 
   @IsDateString()
   start_date: string;

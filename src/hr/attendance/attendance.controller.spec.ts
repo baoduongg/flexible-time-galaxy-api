@@ -18,7 +18,10 @@ describe('AttendanceController', () => {
   );
 
   it('is mounted under app/attendance', () => {
-    const path = Reflect.getMetadata(PATH_METADATA, AttendanceController) as string;
+    const path = Reflect.getMetadata(
+      PATH_METADATA,
+      AttendanceController,
+    ) as string;
     expect(path).toBe('app/attendance');
   });
 });

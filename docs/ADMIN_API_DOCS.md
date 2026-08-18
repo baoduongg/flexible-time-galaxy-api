@@ -9,8 +9,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 * **Base URL:** `http://localhost:3001` *(hoặc domain server backend)*
 * **Global Prefix:** `/api/g-care`
 * **Xác thực & Quyền hạn (Authentication & Authorization):**
-  * Tất cả các endpoint trong module Admin đều được bảo vệ bởi **`JwtAuthGuard`** và **`RolesGuard`**.
-  * Yêu cầu tài khoản có quyền **`ADMIN`** (`Role.ADMIN`).
+  * Tất cả các endpoint trong module Admin đều được bảo vệ bởi **`JwtAuthGuard`** và **`AdminGuard`**.
+  * Yêu cầu tài khoản có cờ hệ thống **`isAdmin = true`** — đây là quyền quản trị độc lập, tách biệt với `orgRole` (cấp bậc tổ chức: `MEMBER` < `LEADER` < `MANAGER` < `DIRECTOR`).
   * Header bắt buộc:
     ```http
     Authorization: Bearer <access_token>
@@ -53,7 +53,12 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 | 14 | **News** | `POST` | `/api/g-care/admin/news` | Tạo bài viết tin tức mới | ADMIN |
 | 15 | **News** | `PATCH` | `/api/g-care/admin/news/:id` | Chỉnh sửa bài viết tin tức | ADMIN |
 | 16 | **News** | `DELETE` | `/api/g-care/admin/news/:id` | Xóa bài viết tin tức | ADMIN |
-| 17 | **Approvers** | `GET` | `/api/g-care/admin/approvers` | Danh sách người có quyền duyệt | ADMIN |
+| 17 | **Org** | `POST` | `/api/g-care/admin/org/teams` | Tạo team mới | ADMIN |
+| 18 | **Org** | `GET` | `/api/g-care/admin/org/teams` | Danh sách team | ADMIN |
+| 19 | **Org** | `PATCH` | `/api/g-care/admin/org/teams/:id` | Cập nhật team | ADMIN |
+| 20 | **Org** | `POST` | `/api/g-care/admin/org/departments` | Tạo phòng ban mới | ADMIN |
+| 21 | **Org** | `GET` | `/api/g-care/admin/org/departments` | Danh sách phòng ban | ADMIN |
+| 22 | **Org** | `PATCH` | `/api/g-care/admin/org/departments/:id` | Cập nhật phòng ban | ADMIN |
 
 ---
 
@@ -80,11 +85,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "user": {
         "id": 1,
         "username": "admin",
-        "email": "admin@g-care.vn",
-        "firstName": "Admin",
-        "lastName": "System",
-        "role": "ADMIN",
-        "isApprover": true
+        "isAdmin": true,
+        "orgRole": "DIRECTOR"
       }
     }
   }
@@ -110,7 +112,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 #### 4. Thống kê số liệu tổng quan
 * **Endpoint:** `GET /api/g-care/admin/dashboard/admin`
 * **Headers:** `Authorization: Bearer <access_token>`
-* **Mô tả:** Lấy tổng số nhân sự (phân loại theo role Admin, Member), số lượng nhân sự đi làm/nghỉ hôm nay, số đơn chờ duyệt và danh sách nghỉ phép hôm nay.
+* **Mô tả:** Lấy tổng số nhân sự (phân loại theo cờ `isAdmin`), số lượng nhân sự đi làm/nghỉ hôm nay, số đơn chờ duyệt và danh sách nghỉ phép hôm nay.
+* **Lưu ý:** `total_admins`/`total_members` giữ nguyên tên field như cũ nhưng nay đếm theo `isAdmin = true` / `isAdmin = false` trên toàn bộ 4 cấp `orgRole` (`MEMBER`/`LEADER`/`MANAGER`/`DIRECTOR`), không còn dựa vào enum `Role` 2 giá trị cũ.
 * **Response (200 OK):**
   ```json
   {
@@ -166,9 +169,8 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 * **Query Parameters:**
   * `page` *(optional, number, default: 1)*
   * `limit` *(optional, number, default: 10)*
-  * `search` *(optional, string)*: Tìm kiếm theo tên, username, email, số điện thoại
-  * `role` *(optional, enum: `ADMIN`, `MANAGER`, `MEMBER`)*
-  * `departmentId` *(optional, number)*
+  * `search` *(optional, string)*: Tìm kiếm theo username, email, họ tên
+  * `org_role` *(optional, enum: `MEMBER`, `LEADER`, `MANAGER`, `DIRECTOR`)*
 * **Response (200 OK):**
   ```json
   {
@@ -181,14 +183,11 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
           "email": "vana@g-care.vn",
           "firstName": "Văn A",
           "lastName": "Nguyễn",
-          "phone": "0987654321",
-          "role": "MEMBER",
-          "isApprover": false,
-          "department": {
-            "id": 1,
-            "name": "Phòng Kỹ thuật"
-          },
-          "createdAt": "2026-01-15T08:00:00.000Z"
+          "isAdmin": false,
+          "orgRole": "MEMBER",
+          "teamId": 1,
+          "createdAt": "2026-01-15T08:00:00.000Z",
+          "updatedAt": "2026-01-15T08:00:00.000Z"
         }
       ],
       "meta": {
@@ -214,14 +213,11 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "email": "vana@g-care.vn",
       "firstName": "Văn A",
       "lastName": "Nguyễn",
-      "phone": "0987654321",
-      "role": "MEMBER",
-      "isApprover": false,
-      "departmentId": 1,
-      "department": {
-        "id": 1,
-        "name": "Phòng Kỹ thuật"
-      }
+      "isAdmin": false,
+      "orgRole": "MEMBER",
+      "teamId": 1,
+      "createdAt": "2026-01-15T08:00:00.000Z",
+      "updatedAt": "2026-01-15T08:00:00.000Z"
     }
   }
   ```
@@ -237,10 +233,9 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
     "email": "vanb@g-care.vn",
     "firstName": "Văn B",
     "lastName": "Nguyễn",
-    "phone": "0912345678",
-    "role": "MEMBER", // "ADMIN" | "MANAGER" | "MEMBER"
-    "departmentId": 1,
-    "isApprover": false
+    "is_admin": false,
+    "org_role": "MEMBER", // "MEMBER" | "LEADER" | "MANAGER" | "DIRECTOR"
+    "team_id": 1
   }
   ```
 * **Response (201 Created):**
@@ -253,7 +248,11 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "email": "vanb@g-care.vn",
       "firstName": "Văn B",
       "lastName": "Nguyễn",
-      "role": "MEMBER"
+      "isAdmin": false,
+      "orgRole": "MEMBER",
+      "teamId": 1,
+      "createdAt": "2026-08-18T08:00:00.000Z",
+      "updatedAt": "2026-08-18T08:00:00.000Z"
     }
   }
   ```
@@ -266,8 +265,9 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
   {
     "firstName": "Văn B Updated",
     "email": "new_email@g-care.vn",
-    "role": "MANAGER",
-    "isApprover": true
+    "org_role": "MANAGER",
+    "is_admin": false,
+    "team_id": 2
   }
   ```
 * **Response (200 OK):**
@@ -278,8 +278,12 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "id": 46,
       "username": "nguyenvanb",
       "firstName": "Văn B Updated",
-      "role": "MANAGER",
-      "isApprover": true
+      "email": "new_email@g-care.vn",
+      "isAdmin": false,
+      "orgRole": "MANAGER",
+      "teamId": 2,
+      "createdAt": "2026-08-18T08:00:00.000Z",
+      "updatedAt": "2026-08-18T08:15:00.000Z"
     }
   }
   ```
@@ -310,7 +314,7 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
   * `status` *(optional, enum: `pending`, `approved`, `rejected`)*
   * `leave_type` *(optional, enum: `annual`, `unpaid`, `maternity`, `feedback`)*
   * `user_id` *(optional, number)*: Lọc theo nhân viên
-  * `approver_id` *(optional, number)*: Lọc theo người duyệt
+  * `approver_id` *(optional, number)*: Lọc theo người duyệt — khớp nếu user này được gán ở **bất kỳ bước nào** trong `approval_steps` của đơn (không chỉ bước đang chờ), vì mỗi đơn nay có nhiều bước duyệt tuần tự thay vì một người duyệt cố định
   * `search` *(optional, string)*: Tìm kiếm theo tên nhân viên hoặc lý do
   * `start_date` *(optional, string, YYYY-MM-DD)*: Từ ngày
   * `end_date` *(optional, string, YYYY-MM-DD)*: Đến ngày
@@ -334,8 +338,10 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
           "attendance_date": null,
           "correction_time": null,
           "status": "pending",
-          "approver_id": 2,
-          "approver_name": "Lê Quản Lý",
+          "approval_steps": [
+            { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "approved", "note": null, "decided_at": "2026-08-18T02:00:00.000Z" },
+            { "level": "MANAGER", "approver_id": 8, "approver_name": "Lê Văn C", "status": "pending", "note": null, "decided_at": null }
+          ],
           "reason": "Giải quyết việc cá nhân",
           "decided_at": null,
           "decided_by": null,
@@ -373,8 +379,10 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
       "duration_days": 2,
       "duration_label": "2 ngày",
       "status": "pending",
-      "approver_id": 2,
-      "approver_name": "Lê Quản Lý",
+      "approval_steps": [
+        { "level": "LEADER", "approver_id": 7, "approver_name": "Trần Thị B", "status": "approved", "note": null, "decided_at": "2026-08-18T02:00:00.000Z" },
+        { "level": "MANAGER", "approver_id": 8, "approver_name": "Lê Văn C", "status": "pending", "note": null, "decided_at": null }
+      ],
       "reason": "Giải quyết việc cá nhân",
       "decided_at": null,
       "decided_by": null,
@@ -501,22 +509,120 @@ Tài liệu này mô tả chi tiết toàn bộ các API được sử dụng ch
 
 ---
 
-### 3.6 Module: Approvers Management
+### 3.6 Module: Org Management (Team / Phòng ban)
 
-#### 17. Danh sách người duyệt
-* **Endpoint:** `GET /api/g-care/admin/approvers`
+Quản lý cấu trúc tổ chức dùng để tự động resolve chuỗi phê duyệt nghỉ phép (xem §3.4): mỗi `Team` có một `leader` (`orgRole = LEADER`), mỗi `Department` có một `manager` (`orgRole = MANAGER`), mỗi user có thể thuộc một `team`.
+
+#### 17. Tạo team mới
+* **Endpoint:** `POST /api/g-care/admin/org/teams`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Request Body:**
+  ```json
+  {
+    "name": "Team Backend",
+    "leader_id": 7,
+    "department_id": 1
+  }
+  ```
+* **Validate:** `leader_id` phải là user có `orgRole = LEADER`; `department_id` phải tồn tại.
+* **Response (201 Created):**
+  ```json
+  {
+    "status": "created",
+    "data": {
+      "id": 3,
+      "name": "Team Backend",
+      "leaderId": 7,
+      "departmentId": 1
+    }
+  }
+  ```
+
+#### 18. Danh sách team
+* **Endpoint:** `GET /api/g-care/admin/org/teams`
 * **Headers:** `Authorization: Bearer <access_token>`
 * **Response (200 OK):**
   ```json
   {
     "status": "success",
     "data": [
+      { "id": 3, "name": "Team Backend", "leaderId": 7, "departmentId": 1 }
+    ]
+  }
+  ```
+
+#### 19. Cập nhật team
+* **Endpoint:** `PATCH /api/g-care/admin/org/teams/:id`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Request Body:**
+  ```json
+  {
+    "name": "Team Backend & Platform",
+    "leader_id": 9,
+    "department_id": 1
+  }
+  ```
+* **Response (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "data": { "id": 3, "name": "Team Backend & Platform", "leaderId": 9, "departmentId": 1 }
+  }
+  ```
+
+#### 20. Tạo phòng ban mới
+* **Endpoint:** `POST /api/g-care/admin/org/departments`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Request Body:**
+  ```json
+  {
+    "name": "Phòng Kỹ thuật",
+    "manager_id": 8
+  }
+  ```
+* **Validate:** `manager_id` phải là user có `orgRole = MANAGER`.
+* **Response (201 Created):**
+  ```json
+  {
+    "status": "created",
+    "data": { "id": 1, "name": "Phòng Kỹ thuật", "managerId": 8 }
+  }
+  ```
+
+#### 21. Danh sách phòng ban
+* **Endpoint:** `GET /api/g-care/admin/org/departments`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Response (200 OK):** (kèm danh sách `teams` trực thuộc từng phòng ban)
+  ```json
+  {
+    "status": "success",
+    "data": [
       {
-        "id": 2,
-        "name": "Trần Thị Quản Lý",
-        "username": "quanly_tt",
-        "email": "quanly@g-care.vn"
+        "id": 1,
+        "name": "Phòng Kỹ thuật",
+        "managerId": 8,
+        "teams": [
+          { "id": 3, "name": "Team Backend", "leaderId": 7, "departmentId": 1 }
+        ]
       }
     ]
+  }
+  ```
+
+#### 22. Cập nhật phòng ban
+* **Endpoint:** `PATCH /api/g-care/admin/org/departments/:id`
+* **Headers:** `Authorization: Bearer <access_token>`
+* **Request Body:**
+  ```json
+  {
+    "name": "Phòng Kỹ thuật & Sản phẩm",
+    "manager_id": 8
+  }
+  ```
+* **Response (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "data": { "id": 1, "name": "Phòng Kỹ thuật & Sản phẩm", "managerId": 8 }
   }
   ```

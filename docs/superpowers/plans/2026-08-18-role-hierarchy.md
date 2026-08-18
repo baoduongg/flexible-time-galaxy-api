@@ -1743,7 +1743,24 @@ In `src/hr/leave/leave.mapper.ts`, replace the `approver_id`/`approver_name` lin
 
 - [ ] **Step 5: Update failing tests first — `leave.service.spec.ts` `create` block**
 
-Replace the whole `describe('create', ...)` block in `src/hr/leave/leave.service.spec.ts`:
+First, update the `prisma` mock object declared near the top of the file (`const prisma = { user: { findUnique: jest.fn() }, ... }`) to add `findFirst`:
+
+```typescript
+  const prisma = {
+    user: { findUnique: jest.fn(), findFirst: jest.fn() },
+    leaveRequest: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+      aggregate: jest.fn(),
+    },
+    leaveBalance: { findUnique: jest.fn() },
+  };
+```
+
+Then replace the whole `describe('create', ...)` block in `src/hr/leave/leave.service.spec.ts`:
 
 ```typescript
   describe('create', () => {

@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient, OrgRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
 
@@ -8,32 +8,55 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const accounts = [
-    { username: 'admin', password: 'admin', role: Role.ADMIN, isApprover: true, approverTitle: 'Quản trị viên' },
-    { username: 'member', password: 'member', role: Role.MEMBER, isApprover: false, approverTitle: null },
+    { username: 'admin', password: 'admin', isAdmin: true, orgRole: OrgRole.MEMBER },
+    { username: 'director', password: 'director', isAdmin: false, orgRole: OrgRole.DIRECTOR },
+    { username: 'manager', password: 'manager', isAdmin: false, orgRole: OrgRole.MANAGER },
+    { username: 'leader', password: 'leader', isAdmin: false, orgRole: OrgRole.LEADER },
+    { username: 'member', password: 'member', isAdmin: false, orgRole: OrgRole.MEMBER },
   ];
 
+  const userIds: Record<string, number> = {};
   for (const account of accounts) {
     const hashedPassword = await bcrypt.hash(account.password, 10);
 
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { username: account.username },
-      update: {
-        password: hashedPassword,
-        role: account.role,
-        isApprover: account.isApprover,
-        approverTitle: account.approverTitle,
-      },
+      update: { password: hashedPassword, isAdmin: account.isAdmin, orgRole: account.orgRole },
       create: {
         username: account.username,
         password: hashedPassword,
-        role: account.role,
-        isApprover: account.isApprover,
-        approverTitle: account.approverTitle,
+        isAdmin: account.isAdmin,
+        orgRole: account.orgRole,
       },
     });
+    userIds[account.username] = user.id;
 
-    console.log(`Seeded user: ${account.username} (${account.role})`);
+    console.log(`Seeded user: ${account.username} (isAdmin=${account.isAdmin}, orgRole=${account.orgRole})`);
   }
+
+  const department = await prisma.department.upsert({
+    where: { managerId: userIds.manager },
+    update: { name: 'Phòng Vận hành' },
+    create: { name: 'Phòng Vận hành', managerId: userIds.manager },
+  });
+  console.log(`Seeded department: ${department.name}`);
+
+  const team = await prisma.team.upsert({
+    where: { leaderId: userIds.leader },
+    update: { name: 'Team Sản phẩm', departmentId: department.id },
+    create: { name: 'Team Sản phẩm', leaderId: userIds.leader, departmentId: department.id },
+  });
+  console.log(`Seeded team: ${team.name}`);
+
+  await prisma.user.update({
+    where: { id: userIds.leader },
+    data: { teamId: team.id },
+  });
+  await prisma.user.update({
+    where: { id: userIds.member },
+    data: { teamId: team.id },
+  });
+  console.log('Assigned leader + member to team');
 
   const holidays = [
     { date: new Date('2026-01-01'), name: 'Tết Dương lịch' },
