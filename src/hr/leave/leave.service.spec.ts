@@ -140,6 +140,7 @@ describe('LeaveService', () => {
 
       const expectedScope = {
         approvalSteps: { some: { approverId: 7, status: 'pending' } },
+        status: 'pending',
       };
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expectedScope }),
@@ -147,7 +148,7 @@ describe('LeaveService', () => {
       expect(result.pending_count).toBe(3);
     });
 
-    it('lets isAdmin actors see every request', async () => {
+    it('lets isAdmin actors see every pending request, excluding already-decided ones', async () => {
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.leaveRequest.count.mockResolvedValue(0);
 
@@ -160,7 +161,34 @@ describe('LeaveService', () => {
       await service.listApproval(admin, { page: 1, page_size: 20 });
 
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: {} }),
+        expect.objectContaining({ where: { status: 'pending' } }),
+      );
+    });
+
+    it('excludes a request rejected at step 0 from the step-1 approver queue (status: pending scope)', async () => {
+      // Step 0 rejected -> LeaveRequest.status = rejected, but step 1 is
+      // deliberately left pending. Without the status: pending scope filter,
+      // this request would still show up for the step-1 approver.
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
+
+      const stepOneApprover: JwtPayload = {
+        sub: 8,
+        username: 'manager',
+        isAdmin: false,
+        orgRole: 'MANAGER',
+      };
+      await service.listApproval(stepOneApprover, { page: 1, page_size: 20 });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            approvalSteps: { some: { approverId: 8, status: 'pending' } },
+            status: 'pending',
+          },
+        }),
       );
     });
   });
@@ -524,6 +552,51 @@ describe('LeaveService', () => {
         new Date('2026-08-10'),
         '08:15',
       );
+    });
+
+    it('lets an isAdmin actor decide a legacy request with zero approval steps', async () => {
+      const legacyNoSteps = pendingLeave([]);
+      prisma.leaveRequest.findUnique.mockResolvedValue(legacyNoSteps);
+      prisma.leaveRequest.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...legacyNoSteps, ...data }),
+      );
+      const admin: JwtPayload = {
+        sub: 1,
+        username: 'admin',
+        isAdmin: true,
+        orgRole: 'MEMBER',
+      };
+
+      const result = await service.approve(1, admin, 'ok');
+
+      expect(prisma.leaveApprovalStep.update).not.toHaveBeenCalled();
+      expect(prisma.leaveRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            status: LeaveStatus.approved,
+            decidedAt: expect.any(Date),
+            decidedById: 1,
+            decisionNote: 'ok',
+          },
+        }),
+      );
+      expect(result.status).toBe('approved');
+    });
+
+    it('still throws BadRequestException for a non-admin on a legacy request with zero approval steps', async () => {
+      const legacyNoSteps = pendingLeave([]);
+      prisma.leaveRequest.findUnique.mockResolvedValue(legacyNoSteps);
+      const nonAdmin: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
+
+      await expect(service.approve(1, nonAdmin)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.leaveRequest.update).not.toHaveBeenCalled();
     });
   });
 });

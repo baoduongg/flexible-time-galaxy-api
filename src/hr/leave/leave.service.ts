@@ -138,11 +138,12 @@ export class LeaveService {
     const pageSize = query.page_size ?? 20;
 
     const scope: Prisma.LeaveRequestWhereInput = user.isAdmin
-      ? {}
+      ? { status: LeaveStatus.pending }
       : {
           approvalSteps: {
             some: { approverId: user.sub, status: ApprovalStepStatus.pending },
           },
+          status: LeaveStatus.pending,
         };
     const where: Prisma.LeaveRequestWhereInput = {
       ...scope,
@@ -304,19 +305,28 @@ export class LeaveService {
     const currentStep = leave.approvalSteps.find(
       (step) => step.status === ApprovalStepStatus.pending,
     );
-    if (!currentStep) {
+    // ponytail: legacy rows created before the org-hierarchy migration have
+    // zero approvalSteps and can never surface a pending step — only an
+    // admin can decide them directly, since there's no real approver chain.
+    const isLegacyAdminOverride =
+      !currentStep && leave.approvalSteps.length === 0 && actor.isAdmin;
+    if (!currentStep && !isLegacyAdminOverride) {
       throw new BadRequestException('Đơn đã được xử lý');
     }
-    if (currentStep.approverId !== actor.sub && !actor.isAdmin) {
+    if (currentStep && currentStep.approverId !== actor.sub && !actor.isAdmin) {
       throw new ForbiddenException('Không có quyền duyệt đơn này');
     }
 
-    await this.prisma.leaveApprovalStep.update({
-      where: { id: currentStep.id },
-      data: { status: decision, note: note ?? null, decidedAt: new Date() },
-    });
+    if (currentStep) {
+      await this.prisma.leaveApprovalStep.update({
+        where: { id: currentStep.id },
+        data: { status: decision, note: note ?? null, decidedAt: new Date() },
+      });
+    }
 
-    const isLastStep = currentStep.order === leave.approvalSteps.length - 1;
+    const isLastStep = currentStep
+      ? currentStep.order === leave.approvalSteps.length - 1
+      : true;
     const finalStatus =
       decision === ApprovalStepStatus.rejected
         ? LeaveStatus.rejected

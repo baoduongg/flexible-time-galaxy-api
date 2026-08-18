@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -145,6 +146,29 @@ export class UsersService {
 
   async remove(id: number) {
     await this.findOne(id);
+
+    const [ledTeam, managedDept] = await Promise.all([
+      this.prisma.team.findUnique({
+        where: { leaderId: id },
+        select: { name: true },
+      }),
+      this.prisma.department.findUnique({
+        where: { managerId: id },
+        select: { name: true },
+      }),
+    ]);
+
+    if (ledTeam) {
+      throw new BadRequestException(
+        `Không thể xóa: user đang là Trưởng nhóm của team ${ledTeam.name}, hãy đổi Trưởng nhóm trước`,
+      );
+    }
+    if (managedDept) {
+      throw new BadRequestException(
+        `Không thể xóa: user đang là Trưởng phòng của phòng ban ${managedDept.name}, hãy đổi Trưởng phòng trước`,
+      );
+    }
+
     await this.prisma.user.delete({ where: { id } });
     return { id };
   }
