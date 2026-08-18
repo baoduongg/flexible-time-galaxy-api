@@ -8,8 +8,8 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const accounts = [
-    { username: 'admin', password: 'admin', role: Role.ADMIN },
-    { username: 'member', password: 'member', role: Role.MEMBER },
+    { username: 'admin', password: 'admin', role: Role.ADMIN, isApprover: true, approverTitle: 'Quản trị viên' },
+    { username: 'member', password: 'member', role: Role.MEMBER, isApprover: false, approverTitle: null },
   ];
 
   for (const account of accounts) {
@@ -20,11 +20,15 @@ async function main() {
       update: {
         password: hashedPassword,
         role: account.role,
+        isApprover: account.isApprover,
+        approverTitle: account.approverTitle,
       },
       create: {
         username: account.username,
         password: hashedPassword,
         role: account.role,
+        isApprover: account.isApprover,
+        approverTitle: account.approverTitle,
       },
     });
 

@@ -16,6 +16,19 @@ enum Role {
   MEMBER
 }
 
+enum LeaveType {
+  annual
+  unpaid
+  maternity
+  feedback
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
@@ -26,4 +39,79 @@ model User {
   role      Role     @default(MEMBER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  isApprover    Boolean @default(false)
+  approverTitle String?
+
+  leaveRequestsAsRequester LeaveRequest[] @relation("LeaveRequester")
+  leaveRequestsAsApprover  LeaveRequest[] @relation("LeaveApprover")
+  leaveRequestsAsDecider   LeaveRequest[] @relation("LeaveDecider")
+  leaveBalances            LeaveBalance[]
+  attendances              Attendance[]
+}
+
+model LeaveRequest {
+  id             Int         @id @default(autoincrement())
+  userId         Int
+  user           User        @relation("LeaveRequester", fields: [userId], references: [id])
+  leaveType      LeaveType
+  startDate      DateTime    @db.Date
+  endDate        DateTime    @db.Date
+  durationDays   Decimal     @db.Decimal(5, 2)
+  attendanceDate DateTime?   @db.Date
+  correctionTime String?
+  status         LeaveStatus @default(pending)
+  approverId     Int
+  approver       User        @relation("LeaveApprover", fields: [approverId], references: [id])
+  reason         String
+  decidedAt      DateTime?
+  decidedById    Int?
+  decidedBy      User?       @relation("LeaveDecider", fields: [decidedById], references: [id])
+  decisionNote   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([approverId])
+  @@index([status])
+}
+
+model LeaveBalance {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  year      Int
+  totalDays Decimal  @default(12) @db.Decimal(5, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, year])
+}
+
+model Attendance {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id])
+  date         DateTime  @db.Date
+  checkinTime  DateTime?
+  checkoutTime DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model News {
+  id          Int      @id @default(autoincrement())
+  title       String
+  content     String
+  image       String?
+  category    String?
+  isNew       Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
 }
