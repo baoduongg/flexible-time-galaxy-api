@@ -7,7 +7,6 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NewsModule } from './hr/news/news.module';
 import { DashboardModule } from './hr/dashboard/dashboard.module';
-import { ApproversModule } from './hr/approvers/approvers.module';
 import { OrgModule } from './hr/org/org.module';
 
 @Module({
@@ -18,7 +17,6 @@ import { OrgModule } from './hr/org/org.module';
     UsersModule,
     NewsModule,
     DashboardModule,
-    ApproversModule,
     OrgModule,
   ],
   controllers: [AppController],
