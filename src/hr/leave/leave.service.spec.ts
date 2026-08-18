@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { LeaveType, Role } from '@prisma/client';
+import { LeaveType, LeaveStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { LeaveService } from './leave.service';
@@ -136,6 +136,29 @@ describe('LeaveService', () => {
       const result = await service.getBalance(1, 2026);
 
       expect(result).toEqual({ year: 2026, total: 12, used: 3.5, remaining: 8.5 });
+
+      // Verify leaveBalance lookup uses correct compound key
+      expect(prisma.leaveBalance.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId_year: { userId: 1, year: 2026 } },
+        }),
+      );
+
+      // Verify aggregate filters by userId, leaveType, status, and year range
+      expect(prisma.leaveRequest.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: 1,
+            leaveType: LeaveType.annual,
+            status: LeaveStatus.approved,
+            startDate: expect.objectContaining({
+              gte: new Date(Date.UTC(2026, 0, 1)),
+              lte: new Date(Date.UTC(2026, 11, 31)),
+            }),
+          }),
+          _sum: { durationDays: true },
+        }),
+      );
     });
 
     it('defaults total to 0 when no LeaveBalance row exists yet', async () => {
@@ -145,6 +168,23 @@ describe('LeaveService', () => {
       const result = await service.getBalance(1, 2026);
 
       expect(result).toEqual({ year: 2026, total: 0, used: 0, remaining: 0 });
+
+      // Verify calls were made with correct arguments
+      expect(prisma.leaveBalance.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId_year: { userId: 1, year: 2026 } },
+        }),
+      );
+
+      expect(prisma.leaveRequest.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: 1,
+            leaveType: LeaveType.annual,
+            status: LeaveStatus.approved,
+          }),
+        }),
+      );
     });
   });
 });
