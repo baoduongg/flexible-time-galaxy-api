@@ -127,8 +127,16 @@ describe('LeaveService', () => {
         .mockResolvedValueOnce(0)
         .mockResolvedValueOnce(3);
 
-      const approver: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
-      const result = await service.listApproval(approver, { page: 1, page_size: 20 });
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
+      const result = await service.listApproval(approver, {
+        page: 1,
+        page_size: 20,
+      });
 
       const expectedScope = {
         approvalSteps: { some: { approverId: 7, status: 'pending' } },
@@ -143,7 +151,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.leaveRequest.count.mockResolvedValue(0);
 
-      const admin: JwtPayload = { sub: 1, username: 'admin', isAdmin: true, orgRole: 'MEMBER' } as JwtPayload;
+      const admin: JwtPayload = {
+        sub: 1,
+        username: 'admin',
+        isAdmin: true,
+        orgRole: 'MEMBER',
+      };
       await service.listApproval(admin, { page: 1, page_size: 20 });
 
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
@@ -169,7 +182,9 @@ describe('LeaveService', () => {
           where: expect.objectContaining({
             status: LeaveStatus.pending,
             OR: expect.arrayContaining([
-              { user: { firstName: { contains: 'john', mode: 'insensitive' } } },
+              {
+                user: { firstName: { contains: 'john', mode: 'insensitive' } },
+              },
               { reason: { contains: 'john', mode: 'insensitive' } },
             ]),
           }),
@@ -290,7 +305,14 @@ describe('LeaveService', () => {
   });
 
   describe('approve / reject', () => {
-    function pendingLeave(steps: Array<{ id: number; order: number; approverId: number | null; status: string }>) {
+    function pendingLeave(
+      steps: Array<{
+        id: number;
+        order: number;
+        approverId: number | null;
+        status: string;
+      }>,
+    ) {
       return {
         id: 1,
         userId: 1,
@@ -321,17 +343,31 @@ describe('LeaveService', () => {
 
     it('rejects the decision when the actor is neither the current step approver nor admin', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(twoStepLeave);
-      const stranger: JwtPayload = { sub: 99, username: 'stranger', isAdmin: false, orgRole: 'MEMBER' } as JwtPayload;
+      const stranger: JwtPayload = {
+        sub: 99,
+        username: 'stranger',
+        isAdmin: false,
+        orgRole: 'MEMBER',
+      };
 
-      await expect(service.approve(1, stranger)).rejects.toThrow(ForbiddenException);
+      await expect(service.approve(1, stranger)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.leaveApprovalStep.update).not.toHaveBeenCalled();
     });
 
     it('requires a note to reject', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(twoStepLeave);
-      const approver: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
 
-      await expect(service.reject(1, approver)).rejects.toThrow(BadRequestException);
+      await expect(service.reject(1, approver)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('approving the first of two steps advances to the next step without finalizing the request', async () => {
@@ -340,7 +376,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...twoStepLeave, ...data }),
       );
-      const leaderApprover: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const leaderApprover: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
 
       const result = await service.approve(1, leaderApprover, 'ok');
 
@@ -364,7 +405,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...lastStepPending, ...data }),
       );
-      const managerApprover: JwtPayload = { sub: 8, username: 'manager', isAdmin: false, orgRole: 'MANAGER' } as JwtPayload;
+      const managerApprover: JwtPayload = {
+        sub: 8,
+        username: 'manager',
+        isAdmin: false,
+        orgRole: 'MANAGER',
+      };
 
       const result = await service.approve(2, managerApprover, 'ok');
 
@@ -387,7 +433,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...twoStepLeave, ...data }),
       );
-      const leaderApprover: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const leaderApprover: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
 
       const result = await service.reject(1, leaderApprover, 'không hợp lệ');
 
@@ -410,7 +461,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...twoStepLeave, ...data }),
       );
-      const admin: JwtPayload = { sub: 1, username: 'admin', isAdmin: true, orgRole: 'MEMBER' } as JwtPayload;
+      const admin: JwtPayload = {
+        sub: 1,
+        username: 'admin',
+        isAdmin: true,
+        orgRole: 'MEMBER',
+      };
 
       await expect(service.approve(1, admin, 'ok')).resolves.toBeDefined();
       expect(prisma.leaveApprovalStep.update).toHaveBeenCalledWith({
@@ -420,13 +476,20 @@ describe('LeaveService', () => {
     });
 
     it('does not write back to Attendance when approving a non-feedback request', async () => {
-      const singleStep = pendingLeave([{ id: 1, order: 0, approverId: 7, status: 'pending' }]);
+      const singleStep = pendingLeave([
+        { id: 1, order: 0, approverId: 7, status: 'pending' },
+      ]);
       prisma.leaveRequest.findUnique.mockResolvedValue(singleStep);
       prisma.leaveApprovalStep.update.mockResolvedValue({});
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...singleStep, ...data }),
       );
-      const approver: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
 
       await service.approve(1, approver, 'ok');
 
@@ -435,7 +498,9 @@ describe('LeaveService', () => {
 
     it('writes the correction back to Attendance when the last step approves a feedback request', async () => {
       const singleStep = {
-        ...pendingLeave([{ id: 1, order: 0, approverId: 7, status: 'pending' }]),
+        ...pendingLeave([
+          { id: 1, order: 0, approverId: 7, status: 'pending' },
+        ]),
         leaveType: LeaveType.feedback,
         attendanceDate: new Date('2026-08-10'),
         correctionTime: '08:15',
@@ -445,7 +510,12 @@ describe('LeaveService', () => {
       prisma.leaveRequest.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...singleStep, ...data }),
       );
-      const approver: JwtPayload = { sub: 7, username: 'leader', isAdmin: false, orgRole: 'LEADER' } as JwtPayload;
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'leader',
+        isAdmin: false,
+        orgRole: 'LEADER',
+      };
 
       await service.approve(1, approver, 'ok');
 

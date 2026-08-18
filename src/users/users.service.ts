@@ -36,10 +36,27 @@ export class UsersService {
       ...(query.search
         ? {
             OR: [
-              { username: { contains: query.search, mode: 'insensitive' as const } },
-              { email: { contains: query.search, mode: 'insensitive' as const } },
-              { firstName: { contains: query.search, mode: 'insensitive' as const } },
-              { lastName: { contains: query.search, mode: 'insensitive' as const } },
+              {
+                username: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                email: { contains: query.search, mode: 'insensitive' as const },
+              },
+              {
+                firstName: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                lastName: {
+                  contains: query.search,
+                  mode: 'insensitive' as const,
+                },
+              },
             ],
           }
         : {}),
@@ -118,7 +135,9 @@ export class UsersService {
         ...(dto.is_admin !== undefined ? { isAdmin: dto.is_admin } : {}),
         ...(dto.org_role !== undefined ? { orgRole: dto.org_role } : {}),
         ...(dto.team_id !== undefined ? { teamId: dto.team_id } : {}),
-        password: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
+        password: dto.password
+          ? await bcrypt.hash(dto.password, 10)
+          : undefined,
       },
       select: USER_SELECT,
     });

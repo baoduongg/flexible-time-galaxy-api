@@ -32,7 +32,10 @@ export class OrgAdminController {
   }
 
   @Patch('teams/:id')
-  updateTeam(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTeamDto) {
+  updateTeam(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateTeamDto,
+  ) {
     return this.orgService.updateTeam(id, dto);
   }
 

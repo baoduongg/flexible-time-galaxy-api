@@ -4,7 +4,13 @@ import { resolveApprovalChain } from './leave-chain.util';
 
 describe('resolveApprovalChain', () => {
   describe('requester is MEMBER', () => {
-    const base = { id: 1, orgRole: OrgRole.MEMBER, leaderId: 10, managerId: 20, directorId: 30 };
+    const base = {
+      id: 1,
+      orgRole: OrgRole.MEMBER,
+      leaderId: 10,
+      managerId: 20,
+      directorId: 30,
+    };
 
     it('≤2 ngày: only LEADER', () => {
       expect(resolveApprovalChain(base, 2)).toEqual([
@@ -35,7 +41,13 @@ describe('resolveApprovalChain', () => {
   });
 
   describe('requester is LEADER', () => {
-    const base = { id: 10, orgRole: OrgRole.LEADER, leaderId: null, managerId: 20, directorId: 30 };
+    const base = {
+      id: 10,
+      orgRole: OrgRole.LEADER,
+      leaderId: null,
+      managerId: 20,
+      directorId: 30,
+    };
 
     it('≤5 ngày: starts at MANAGER (skips self as LEADER)', () => {
       expect(resolveApprovalChain(base, 4)).toEqual([
@@ -53,7 +65,13 @@ describe('resolveApprovalChain', () => {
 
   describe('requester is MANAGER', () => {
     it('always escalates straight to DIRECTOR regardless of duration', () => {
-      const context = { id: 20, orgRole: OrgRole.MANAGER, leaderId: null, managerId: null, directorId: 30 };
+      const context = {
+        id: 20,
+        orgRole: OrgRole.MANAGER,
+        leaderId: null,
+        managerId: null,
+        directorId: 30,
+      };
       expect(resolveApprovalChain(context, 1)).toEqual([
         { level: OrgRole.DIRECTOR, approverId: 30 },
       ]);
@@ -63,14 +81,28 @@ describe('resolveApprovalChain', () => {
     });
 
     it('throws when no DIRECTOR exists in the company', () => {
-      const context = { id: 20, orgRole: OrgRole.MANAGER, leaderId: null, managerId: null, directorId: null };
-      expect(() => resolveApprovalChain(context, 1)).toThrow(BadRequestException);
+      const context = {
+        id: 20,
+        orgRole: OrgRole.MANAGER,
+        leaderId: null,
+        managerId: null,
+        directorId: null,
+      };
+      expect(() => resolveApprovalChain(context, 1)).toThrow(
+        BadRequestException,
+      );
     });
   });
 
   describe('requester is DIRECTOR', () => {
     it('produces a single step with approverId null (ADMIN must decide)', () => {
-      const context = { id: 30, orgRole: OrgRole.DIRECTOR, leaderId: null, managerId: null, directorId: 30 };
+      const context = {
+        id: 30,
+        orgRole: OrgRole.DIRECTOR,
+        leaderId: null,
+        managerId: null,
+        directorId: 30,
+      };
       expect(resolveApprovalChain(context, 3)).toEqual([
         { level: OrgRole.DIRECTOR, approverId: null },
       ]);

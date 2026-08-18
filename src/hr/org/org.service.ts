@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { OrgRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -15,7 +19,11 @@ export class OrgService {
     await this.assertDepartmentExists(dto.department_id);
 
     return this.prisma.team.create({
-      data: { name: dto.name, leaderId: dto.leader_id, departmentId: dto.department_id },
+      data: {
+        name: dto.name,
+        leaderId: dto.leader_id,
+        departmentId: dto.department_id,
+      },
     });
   }
 
@@ -40,7 +48,9 @@ export class OrgService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.leader_id !== undefined ? { leaderId: dto.leader_id } : {}),
-        ...(dto.department_id !== undefined ? { departmentId: dto.department_id } : {}),
+        ...(dto.department_id !== undefined
+          ? { departmentId: dto.department_id }
+          : {}),
       },
     });
   }
@@ -78,7 +88,11 @@ export class OrgService {
     });
   }
 
-  private async assertOrgRole(userId: number, expected: OrgRole, label: string) {
+  private async assertOrgRole(
+    userId: number,
+    expected: OrgRole,
+    label: string,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new BadRequestException(`Không tìm thấy user id=${userId}`);
@@ -91,7 +105,9 @@ export class OrgService {
   }
 
   private async assertDepartmentExists(id: number) {
-    const department = await this.prisma.department.findUnique({ where: { id } });
+    const department = await this.prisma.department.findUnique({
+      where: { id },
+    });
     if (!department) {
       throw new BadRequestException(`Không tìm thấy phòng ban id=${id}`);
     }

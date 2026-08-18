@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,7 +27,12 @@ export class AuthService {
       throw new UnauthorizedException('Sai tài khoản hoặc mật khẩu');
     }
 
-    return this.buildAuthResponse(user.id, user.username, user.isAdmin, user.orgRole);
+    return this.buildAuthResponse(
+      user.id,
+      user.username,
+      user.isAdmin,
+      user.orgRole,
+    );
   }
 
   async refreshToken(refreshToken: string) {
@@ -52,7 +54,12 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
-    return this.buildAuthResponse(user.id, user.username, user.isAdmin, user.orgRole);
+    return this.buildAuthResponse(
+      user.id,
+      user.username,
+      user.isAdmin,
+      user.orgRole,
+    );
   }
 
   private async buildAuthResponse(

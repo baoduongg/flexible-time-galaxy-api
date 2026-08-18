@@ -4,10 +4,16 @@ import { AdminGuard } from '../../auth/guards/admin.guard';
 
 describe('OrgAdminController', () => {
   it('is mounted under admin/org and requires AdminGuard', () => {
-    const path = Reflect.getMetadata(PATH_METADATA, OrgAdminController) as string;
+    const path = Reflect.getMetadata(
+      PATH_METADATA,
+      OrgAdminController,
+    ) as string;
     expect(path).toBe('admin/org');
 
-    const guards = Reflect.getMetadata(GUARDS_METADATA, OrgAdminController) as unknown[];
+    const guards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      OrgAdminController,
+    ) as unknown[];
     expect(guards).toContain(AdminGuard);
   });
 });

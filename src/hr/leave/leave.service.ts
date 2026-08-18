@@ -184,9 +184,7 @@ export class LeaveService {
       ...(query.start_date
         ? { startDate: { gte: new Date(query.start_date) } }
         : {}),
-      ...(query.end_date
-        ? { endDate: { lte: new Date(query.end_date) } }
-        : {}),
+      ...(query.end_date ? { endDate: { lte: new Date(query.end_date) } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -287,7 +285,8 @@ export class LeaveService {
   private async decideStep(
     id: number,
     actor: JwtPayload,
-    decision: typeof ApprovalStepStatus.approved | typeof ApprovalStepStatus.rejected,
+    decision:
+      typeof ApprovalStepStatus.approved | typeof ApprovalStepStatus.rejected,
     note?: string,
   ) {
     const leave = await this.prisma.leaveRequest.findUnique({

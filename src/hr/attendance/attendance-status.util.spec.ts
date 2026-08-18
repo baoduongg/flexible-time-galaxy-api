@@ -37,9 +37,7 @@ describe('deriveStatusCode', () => {
 
   it('holiday takes priority over a check-in', () => {
     const workStart = new Date(Date.UTC(2026, 7, 17, 1, 0, 0));
-    expect(deriveStatusCode({ checkinTime: workStart }, false, true)).toBe(
-      'L',
-    );
+    expect(deriveStatusCode({ checkinTime: workStart }, false, true)).toBe('L');
   });
 });
 

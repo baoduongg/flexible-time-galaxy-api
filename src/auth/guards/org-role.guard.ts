@@ -16,10 +16,10 @@ export class OrgRoleGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const minRole = this.reflector.getAllAndOverride<OrgRole>(MIN_ORG_ROLE_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const minRole = this.reflector.getAllAndOverride<OrgRole>(
+      MIN_ORG_ROLE_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (!minRole) {
       return true;
@@ -27,7 +27,8 @@ export class OrgRoleGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>();
     return (
-      user.isAdmin === true || ORG_ROLE_RANK[user.orgRole] >= ORG_ROLE_RANK[minRole]
+      user.isAdmin === true ||
+      ORG_ROLE_RANK[user.orgRole] >= ORG_ROLE_RANK[minRole]
     );
   }
 }

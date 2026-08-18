@@ -38,7 +38,7 @@ describe('AttendanceService', () => {
   });
 
   describe('checkin', () => {
-    it('creates today\'s row on first check-in', async () => {
+    it("creates today's row on first check-in", async () => {
       prisma.attendance.create.mockResolvedValue({
         checkinTime: new Date(),
         checkoutTime: null,

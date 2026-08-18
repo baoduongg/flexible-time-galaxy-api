@@ -24,41 +24,57 @@ export function resolveApprovalChain(
   }
 
   if (context.orgRole === OrgRole.LEADER) {
-    const steps: ChainStep[] = [{ level: OrgRole.MANAGER, approverId: requireManager(context) }];
+    const steps: ChainStep[] = [
+      { level: OrgRole.MANAGER, approverId: requireManager(context) },
+    ];
     if (durationDays > 5) {
-      steps.push({ level: OrgRole.DIRECTOR, approverId: requireDirector(context) });
+      steps.push({
+        level: OrgRole.DIRECTOR,
+        approverId: requireDirector(context),
+      });
     }
     return steps;
   }
 
   // MEMBER
-  const steps: ChainStep[] = [{ level: OrgRole.LEADER, approverId: requireLeader(context) }];
+  const steps: ChainStep[] = [
+    { level: OrgRole.LEADER, approverId: requireLeader(context) },
+  ];
   if (durationDays > 2) {
     steps.push({ level: OrgRole.MANAGER, approverId: requireManager(context) });
   }
   if (durationDays > 5) {
-    steps.push({ level: OrgRole.DIRECTOR, approverId: requireDirector(context) });
+    steps.push({
+      level: OrgRole.DIRECTOR,
+      approverId: requireDirector(context),
+    });
   }
   return steps;
 }
 
 function requireLeader(context: OrgContext): number {
   if (context.leaderId === null) {
-    throw new BadRequestException('Bạn chưa được gán vào team nào, không thể tạo đơn');
+    throw new BadRequestException(
+      'Bạn chưa được gán vào team nào, không thể tạo đơn',
+    );
   }
   return context.leaderId;
 }
 
 function requireManager(context: OrgContext): number {
   if (context.managerId === null) {
-    throw new BadRequestException('Team/phòng ban của bạn chưa được gán Trưởng phòng');
+    throw new BadRequestException(
+      'Team/phòng ban của bạn chưa được gán Trưởng phòng',
+    );
   }
   return context.managerId;
 }
 
 function requireDirector(context: OrgContext): number {
   if (context.directorId === null) {
-    throw new BadRequestException('Công ty chưa có Director nào trong hệ thống');
+    throw new BadRequestException(
+      'Công ty chưa có Director nào trong hệ thống',
+    );
   }
   return context.directorId;
 }

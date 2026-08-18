@@ -6,11 +6,15 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 describe('LeaveAppController', () => {
   it('is mounted under app/leave with no admin guard', () => {
-    const path = Reflect.getMetadata(PATH_METADATA, LeaveAppController) as string;
+    const path = Reflect.getMetadata(
+      PATH_METADATA,
+      LeaveAppController,
+    ) as string;
     expect(path).toBe('app/leave');
 
     const guards =
-      (Reflect.getMetadata(GUARDS_METADATA, LeaveAppController) as unknown[]) ?? [];
+      (Reflect.getMetadata(GUARDS_METADATA, LeaveAppController) as unknown[]) ??
+      [];
     expect(guards).not.toContain(AdminGuard);
     expect(guards).toContain(JwtAuthGuard);
   });
@@ -18,10 +22,16 @@ describe('LeaveAppController', () => {
 
 describe('LeaveAdminController', () => {
   it('is mounted under admin/leave and requires AdminGuard', () => {
-    const path = Reflect.getMetadata(PATH_METADATA, LeaveAdminController) as string;
+    const path = Reflect.getMetadata(
+      PATH_METADATA,
+      LeaveAdminController,
+    ) as string;
     expect(path).toBe('admin/leave');
 
-    const guards = Reflect.getMetadata(GUARDS_METADATA, LeaveAdminController) as unknown[];
+    const guards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      LeaveAdminController,
+    ) as unknown[];
     expect(guards).toContain(AdminGuard);
     expect(guards).toContain(JwtAuthGuard);
   });

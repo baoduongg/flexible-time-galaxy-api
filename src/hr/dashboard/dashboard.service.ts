@@ -25,17 +25,25 @@ export class DashboardService {
   }
 
   async leader(userId: number) {
-    const team = await this.prisma.team.findUnique({ where: { leaderId: userId } });
+    const team = await this.prisma.team.findUnique({
+      where: { leaderId: userId },
+    });
     if (!team) {
-      throw new NotFoundException('Bạn chưa được gán làm Trưởng nhóm của team nào');
+      throw new NotFoundException(
+        'Bạn chưa được gán làm Trưởng nhóm của team nào',
+      );
     }
     return this.buildStatistics({ teamId: team.id });
   }
 
   async manager(userId: number) {
-    const department = await this.prisma.department.findUnique({ where: { managerId: userId } });
+    const department = await this.prisma.department.findUnique({
+      where: { managerId: userId },
+    });
     if (!department) {
-      throw new NotFoundException('Bạn chưa được gán làm Trưởng phòng của phòng ban nào');
+      throw new NotFoundException(
+        'Bạn chưa được gán làm Trưởng phòng của phòng ban nào',
+      );
     }
     return this.buildStatistics({ team: { departmentId: department.id } });
   }
@@ -70,7 +78,14 @@ export class DashboardService {
         },
         include: {
           user: {
-            select: { id: true, username: true, firstName: true, lastName: true, isAdmin: true, orgRole: true },
+            select: {
+              id: true,
+              username: true,
+              firstName: true,
+              lastName: true,
+              isAdmin: true,
+              orgRole: true,
+            },
           },
         },
       }),
@@ -106,7 +121,9 @@ export class DashboardService {
       absent_today: onLeaveToday.map((leave) => ({
         id: leave.user.id,
         name: displayName(leave.user),
-        role_label: leave.user.isAdmin ? 'Quản trị viên' : ORG_ROLE_LABELS[leave.user.orgRole],
+        role_label: leave.user.isAdmin
+          ? 'Quản trị viên'
+          : ORG_ROLE_LABELS[leave.user.orgRole],
         leave_type_label: LEAVE_TYPE_LABELS[leave.leaveType],
         avatar_initial: displayName(leave.user).charAt(0).toUpperCase(),
       })),
@@ -125,7 +142,11 @@ export class DashboardService {
     ]);
 
     return {
-      leave_balance: { total: balance.total, used: balance.used, remaining: balance.remaining },
+      leave_balance: {
+        total: balance.total,
+        used: balance.used,
+        remaining: balance.remaining,
+      },
       recent_requests: recentRequests.map(toLeaveRequestResponse),
     };
   }
