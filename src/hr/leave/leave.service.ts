@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, Prisma, Role } from '@prisma/client';
+import { LeaveStatus, LeaveType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -91,7 +91,7 @@ export class LeaveService {
   async listApproval(user: JwtPayload, query: ListLeaveQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.page_size ?? 20;
-    const scope = user.role === Role.ADMIN ? {} : { approverId: user.sub };
+    const scope = user.isAdmin ? {} : { approverId: user.sub };
     const where = {
       ...scope,
       ...(query.status ? { status: query.status } : {}),
@@ -244,7 +244,7 @@ export class LeaveService {
     if (leave.status !== LeaveStatus.pending) {
       throw new BadRequestException('Đơn đã được xử lý');
     }
-    if (leave.approverId !== actor.sub && actor.role !== Role.ADMIN) {
+    if (leave.approverId !== actor.sub && !actor.isAdmin) {
       throw new ForbiddenException('Không có quyền duyệt đơn này');
     }
 

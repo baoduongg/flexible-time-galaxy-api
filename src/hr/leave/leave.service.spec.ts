@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { LeaveType, LeaveStatus, Role } from '@prisma/client';
+import { LeaveType, LeaveStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -160,7 +160,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
       const result = await service.listApproval(approver, {
         page: 1,
@@ -177,7 +178,7 @@ describe('LeaveService', () => {
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.leaveRequest.count.mockResolvedValue(0);
 
-      const admin: JwtPayload = { sub: 1, username: 'admin', role: Role.ADMIN };
+      const admin: JwtPayload = { sub: 1, username: 'admin', isAdmin: true, orgRole: 'MEMBER' };
       await service.listApproval(admin, { page: 1, page_size: 20 });
 
       expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
@@ -336,7 +337,8 @@ describe('LeaveService', () => {
       const stranger: JwtPayload = {
         sub: 99,
         username: 'stranger',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       await expect(service.approve(1, stranger)).rejects.toThrow(
@@ -350,7 +352,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       await expect(service.reject(1, approver)).rejects.toThrow(
@@ -366,7 +369,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       const result = await service.approve(1, approver, 'ok');
@@ -391,7 +395,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       await service.approve(1, approver, 'ok');
@@ -413,7 +418,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       await service.approve(1, approver, 'ok');
@@ -439,7 +445,8 @@ describe('LeaveService', () => {
       const approver: JwtPayload = {
         sub: 7,
         username: 'manager',
-        role: Role.MEMBER,
+        isAdmin: false,
+        orgRole: 'MEMBER',
       };
 
       await service.reject(1, approver, 'không hợp lệ');
