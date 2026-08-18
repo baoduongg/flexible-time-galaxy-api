@@ -49,6 +49,22 @@ describe('LeaveService', () => {
       expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
     });
 
+    it('rejects self-approval when approver_id equals the requester', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 1, isApprover: true });
+
+      await expect(
+        service.create(1, {
+          leave_type: LeaveType.annual,
+          approver_id: 1,
+          start_date: '2026-08-17',
+          end_date: '2026-08-17',
+          reason: 'test',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+    });
+
     it('computes duration_days as weekday count and persists via Prisma', async () => {
       prisma.user.findUnique.mockResolvedValue({ id: 7, isApprover: true });
       prisma.leaveRequest.create.mockImplementation(({ data }) =>
@@ -79,6 +95,38 @@ describe('LeaveService', () => {
       );
       expect(result.duration_days).toBe(5);
       expect(result.status).toBe('pending');
+    });
+
+    it('computes duration_days using UTC regardless of server local timezone', async () => {
+      const originalTz = process.env.TZ;
+      process.env.TZ = 'America/Los_Angeles';
+      try {
+        prisma.user.findUnique.mockResolvedValue({ id: 7, isApprover: true });
+        prisma.leaveRequest.create.mockImplementation(({ data }) =>
+          Promise.resolve({
+            id: 1,
+            ...data,
+            user: { username: 'member', firstName: null, lastName: null },
+            approver: { username: 'admin', firstName: null, lastName: null },
+            decidedBy: null,
+            createdAt: new Date('2026-08-18T00:00:00Z'),
+            updatedAt: new Date('2026-08-18T00:00:00Z'),
+          }),
+        );
+
+        // Mon 2026-08-17 .. Fri 2026-08-21 = 5 weekdays, even under a negative UTC offset
+        const result = await service.create(1, {
+          leave_type: LeaveType.annual,
+          approver_id: 7,
+          start_date: '2026-08-17',
+          end_date: '2026-08-21',
+          reason: 'test',
+        });
+
+        expect(result.duration_days).toBe(5);
+      } finally {
+        process.env.TZ = originalTz;
+      }
     });
   });
 
@@ -172,7 +220,7 @@ describe('LeaveService', () => {
       );
     });
 
-    it('defaults total to 0 when no LeaveBalance row exists yet', async () => {
+    it('defaults total to 12 (DEFAULT_ANNUAL_DAYS) when no LeaveBalance row exists yet', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(null);
       prisma.leaveRequest.aggregate.mockResolvedValue({
         _sum: { durationDays: null },
@@ -180,7 +228,7 @@ describe('LeaveService', () => {
 
       const result = await service.getBalance(1, 2026);
 
-      expect(result).toEqual({ year: 2026, total: 0, used: 0, remaining: 0 });
+      expect(result).toEqual({ year: 2026, total: 12, used: 0, remaining: 12 });
 
       // Verify calls were made with correct arguments
       expect(prisma.leaveBalance.findUnique).toHaveBeenCalledWith(
@@ -203,6 +251,17 @@ describe('LeaveService', () => {
           _sum: { durationDays: true },
         }),
       );
+    });
+
+    it('floors remaining at 0 when used exceeds total', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue({ totalDays: 12 });
+      prisma.leaveRequest.aggregate.mockResolvedValue({
+        _sum: { durationDays: 20 },
+      });
+
+      const result = await service.getBalance(1, 2026);
+
+      expect(result).toEqual({ year: 2026, total: 12, used: 20, remaining: 0 });
     });
   });
 

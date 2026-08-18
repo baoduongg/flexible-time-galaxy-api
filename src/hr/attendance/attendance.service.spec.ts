@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { LeaveStatus, LeaveType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AttendanceService } from './attendance.service';
 import { startOfToday } from './attendance-status.util';
@@ -65,6 +66,39 @@ describe('AttendanceService', () => {
         checkoutTime: new Date(),
       });
       await expect(service.checkout(1)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getHistory', () => {
+    it('marks non-annual approved leave (e.g. maternity) as "P", not "Ro"', async () => {
+      // A past month so buildAttendanceHistory covers the whole month regardless of "today".
+      const year = 2020;
+      const month = 3; // March 2020: Mon 2020-03-02 is a weekday
+      prisma.attendance.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.findMany
+        .mockResolvedValueOnce([
+          {
+            leaveType: LeaveType.maternity,
+            status: LeaveStatus.approved,
+            startDate: new Date('2020-03-02'),
+            endDate: new Date('2020-03-02'),
+          },
+        ])
+        .mockResolvedValueOnce([]); // feedbackRequests
+
+      const history = await service.getHistory(1, year, month);
+
+      // getHistory's approvedLeaves query must not filter by leaveType (any approved
+      // leave type counts as "on leave", matching dashboard.service.ts's admin() query).
+      expect(prisma.leaveRequest.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: expect.not.objectContaining({ leaveType: expect.anything() }),
+        }),
+      );
+
+      const day = history.find((d) => d.date === '2020-03-02');
+      expect(day?.status_code).toBe('P');
     });
   });
 });
