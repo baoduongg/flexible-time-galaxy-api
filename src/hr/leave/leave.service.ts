@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { LeaveStatus, LeaveType, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -132,6 +137,62 @@ export class LeaveService {
       used,
       remaining: Number((total - used).toFixed(2)),
     };
+  }
+
+  async findOne(id: number) {
+    const leave = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: LEAVE_INCLUDE,
+    });
+
+    if (!leave) {
+      throw new NotFoundException('Không tìm thấy đơn nghỉ phép');
+    }
+
+    return toLeaveRequestResponse(leave);
+  }
+
+  async approve(id: number, actor: JwtPayload, note?: string) {
+    return this.decide(id, actor, LeaveStatus.approved, note);
+  }
+
+  async reject(id: number, actor: JwtPayload, note?: string) {
+    if (!note) {
+      throw new BadRequestException('note bắt buộc khi từ chối đơn');
+    }
+    return this.decide(id, actor, LeaveStatus.rejected, note);
+  }
+
+  private async decide(
+    id: number,
+    actor: JwtPayload,
+    status: typeof LeaveStatus.approved | typeof LeaveStatus.rejected,
+    note?: string,
+  ) {
+    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
+
+    if (!leave) {
+      throw new NotFoundException('Không tìm thấy đơn nghỉ phép');
+    }
+    if (leave.status !== LeaveStatus.pending) {
+      throw new BadRequestException('Đơn đã được xử lý');
+    }
+    if (leave.approverId !== actor.sub && actor.role !== Role.ADMIN) {
+      throw new ForbiddenException('Không có quyền duyệt đơn này');
+    }
+
+    const updated = await this.prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        status,
+        decidedAt: new Date(),
+        decidedById: actor.sub,
+        decisionNote: note ?? null,
+      },
+      include: LEAVE_INCLUDE,
+    });
+
+    return toLeaveRequestResponse(updated);
   }
 
   // ponytail: weekday count only, no public-holiday calendar yet — see plan's Open Questions.

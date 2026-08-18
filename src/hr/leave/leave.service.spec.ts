@@ -1,5 +1,9 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { LeaveType, LeaveStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
@@ -131,11 +135,18 @@ describe('LeaveService', () => {
   describe('getBalance', () => {
     it('computes remaining = total - used(approved annual leave)', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue({ totalDays: 12 });
-      prisma.leaveRequest.aggregate.mockResolvedValue({ _sum: { durationDays: 3.5 } });
+      prisma.leaveRequest.aggregate.mockResolvedValue({
+        _sum: { durationDays: 3.5 },
+      });
 
       const result = await service.getBalance(1, 2026);
 
-      expect(result).toEqual({ year: 2026, total: 12, used: 3.5, remaining: 8.5 });
+      expect(result).toEqual({
+        year: 2026,
+        total: 12,
+        used: 3.5,
+        remaining: 8.5,
+      });
 
       // Verify leaveBalance lookup uses correct compound key
       expect(prisma.leaveBalance.findUnique).toHaveBeenCalledWith(
@@ -163,7 +174,9 @@ describe('LeaveService', () => {
 
     it('defaults total to 0 when no LeaveBalance row exists yet', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(null);
-      prisma.leaveRequest.aggregate.mockResolvedValue({ _sum: { durationDays: null } });
+      prisma.leaveRequest.aggregate.mockResolvedValue({
+        _sum: { durationDays: null },
+      });
 
       const result = await service.getBalance(1, 2026);
 
@@ -190,6 +203,89 @@ describe('LeaveService', () => {
           _sum: { durationDays: true },
         }),
       );
+    });
+  });
+
+  describe('findOne', () => {
+    it('throws NotFoundException when the id does not exist', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(null);
+      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('approve / reject', () => {
+    const pendingLeave = {
+      id: 1,
+      userId: 1,
+      leaveType: LeaveType.annual,
+      startDate: new Date('2026-08-17'),
+      endDate: new Date('2026-08-17'),
+      durationDays: 1,
+      attendanceDate: null,
+      correctionTime: null,
+      status: LeaveStatus.pending,
+      approverId: 7,
+      reason: 'test',
+      decidedAt: null,
+      decidedById: null,
+      decisionNote: null,
+      createdAt: new Date('2026-08-01T00:00:00Z'),
+      updatedAt: new Date('2026-08-01T00:00:00Z'),
+      user: { username: 'member', firstName: null, lastName: null },
+      approver: { username: 'admin', firstName: null, lastName: null },
+      decidedBy: null,
+    };
+
+    it('rejects the decision when the actor is neither the approver nor admin', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
+      const stranger: JwtPayload = {
+        sub: 99,
+        username: 'stranger',
+        role: Role.MEMBER,
+      };
+
+      await expect(service.approve(1, stranger)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.leaveRequest.update).not.toHaveBeenCalled();
+    });
+
+    it('requires a note to reject', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+
+      await expect(service.reject(1, approver)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('approves and stamps decidedAt/decidedById', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
+      prisma.leaveRequest.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...pendingLeave, ...data }),
+      );
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+
+      const result = await service.approve(1, approver, 'ok');
+
+      expect(prisma.leaveRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({
+            status: LeaveStatus.approved,
+            decidedById: 7,
+          }),
+        }),
+      );
+      expect(result.status).toBe('approved');
     });
   });
 });
