@@ -20,9 +20,9 @@ import { UpdateNewsDto } from './dto/update-news.dto';
 import { NewsService } from './news.service';
 
 @Controller('hr/news')
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class NewsController {
-  constructor(private readonly newsService: NewsService) {}
+  constructor(private readonly newsService: NewsService) { }
 
   @Get()
   findAll(@Query() query: ListNewsQueryDto) {
