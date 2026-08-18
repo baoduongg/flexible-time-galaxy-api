@@ -1,7 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { LeaveType } from '@prisma/client';
+import { LeaveType, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { LeaveService } from './leave.service';
 
 describe('LeaveService', () => {
@@ -74,6 +75,56 @@ describe('LeaveService', () => {
       );
       expect(result.duration_days).toBe(5);
       expect(result.status).toBe('pending');
+    });
+  });
+
+  describe('listMine', () => {
+    it('paginates and scopes to the current user', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count.mockResolvedValue(0);
+
+      const result = await service.listMine(1, { page: 2, page_size: 10 });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 1 }, skip: 10, take: 10 }),
+      );
+      expect(result.meta).toEqual({ total: 0, page: 2, page_size: 10 });
+    });
+  });
+
+  describe('listApproval', () => {
+    it('scopes non-admins to their own approverId and returns pending_count', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(3);
+
+      const approver: JwtPayload = {
+        sub: 7,
+        username: 'manager',
+        role: Role.MEMBER,
+      };
+      const result = await service.listApproval(approver, {
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { approverId: 7 } }),
+      );
+      expect(result.pending_count).toBe(3);
+    });
+
+    it('lets admins see every approver scope', async () => {
+      prisma.leaveRequest.findMany.mockResolvedValue([]);
+      prisma.leaveRequest.count.mockResolvedValue(0);
+
+      const admin: JwtPayload = { sub: 1, username: 'admin', role: Role.ADMIN };
+      await service.listApproval(admin, { page: 1, page_size: 20 });
+
+      expect(prisma.leaveRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
     });
   });
 });

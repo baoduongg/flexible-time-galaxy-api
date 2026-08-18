@@ -1,9 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { LeaveStatus } from '@prisma/client';
+import { LeaveStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  buildPaginationMeta,
+  paginationSkip,
+} from '../../common/utils/paginate.util';
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { LEAVE_INCLUDE } from './leave.constants';
 import { toLeaveRequestResponse } from './leave.mapper';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { ListLeaveQueryDto } from './dto/list-leave-query.dto';
 
 @Injectable()
 export class LeaveService {
@@ -42,6 +48,58 @@ export class LeaveService {
     });
 
     return toLeaveRequestResponse(created);
+  }
+
+  async listMine(userId: number, query: ListLeaveQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.page_size ?? 20;
+    const where = { userId, ...(query.status ? { status: query.status } : {}) };
+
+    const [items, total] = await Promise.all([
+      this.prisma.leaveRequest.findMany({
+        where,
+        include: LEAVE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+      this.prisma.leaveRequest.count({ where }),
+    ]);
+
+    return {
+      items: items.map(toLeaveRequestResponse),
+      meta: buildPaginationMeta(total, page, pageSize),
+    };
+  }
+
+  async listApproval(user: JwtPayload, query: ListLeaveQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.page_size ?? 20;
+    const scope = user.role === Role.ADMIN ? {} : { approverId: user.sub };
+    const where = {
+      ...scope,
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const [items, total, pendingCount] = await Promise.all([
+      this.prisma.leaveRequest.findMany({
+        where,
+        include: LEAVE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+      this.prisma.leaveRequest.count({ where }),
+      this.prisma.leaveRequest.count({
+        where: { ...scope, status: LeaveStatus.pending },
+      }),
+    ]);
+
+    return {
+      items: items.map(toLeaveRequestResponse),
+      pending_count: pendingCount,
+      meta: buildPaginationMeta(total, page, pageSize),
+    };
   }
 
   // ponytail: weekday count only, no public-holiday calendar yet — see plan's Open Questions.
