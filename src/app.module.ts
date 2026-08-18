@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { NewsModule } from './hr/news/news.module';
 import { DashboardModule } from './hr/dashboard/dashboard.module';
 import { ApproversModule } from './hr/approvers/approvers.module';
+import { OrgModule } from './hr/org/org.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ApproversModule } from './hr/approvers/approvers.module';
     NewsModule,
     DashboardModule,
     ApproversModule,
+    OrgModule,
   ],
   controllers: [AppController],
   providers: [AppService],
