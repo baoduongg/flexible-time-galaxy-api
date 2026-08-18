@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LeaveStatus, LeaveType, OrgRole, Prisma } from '@prisma/client';
+import {
+  ApprovalStepStatus,
+  LeaveStatus,
+  LeaveType,
+  OrgRole,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -259,23 +265,26 @@ export class LeaveService {
   }
 
   async approve(id: number, actor: JwtPayload, note?: string) {
-    return this.decide(id, actor, LeaveStatus.approved, note);
+    return this.decideStep(id, actor, ApprovalStepStatus.approved, note);
   }
 
   async reject(id: number, actor: JwtPayload, note?: string) {
     if (!note) {
       throw new BadRequestException('note bắt buộc khi từ chối đơn');
     }
-    return this.decide(id, actor, LeaveStatus.rejected, note);
+    return this.decideStep(id, actor, ApprovalStepStatus.rejected, note);
   }
 
-  private async decide(
+  private async decideStep(
     id: number,
     actor: JwtPayload,
-    status: typeof LeaveStatus.approved | typeof LeaveStatus.rejected,
+    decision: typeof ApprovalStepStatus.approved | typeof ApprovalStepStatus.rejected,
     note?: string,
   ) {
-    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
+    const leave = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { approvalSteps: { orderBy: { order: 'asc' } } },
+    });
 
     if (!leave) {
       throw new NotFoundException('Không tìm thấy đơn nghỉ phép');
@@ -283,23 +292,45 @@ export class LeaveService {
     if (leave.status !== LeaveStatus.pending) {
       throw new BadRequestException('Đơn đã được xử lý');
     }
-    if (leave.approverId !== actor.sub && !actor.isAdmin) {
+
+    const currentStep = leave.approvalSteps.find(
+      (step) => step.status === ApprovalStepStatus.pending,
+    );
+    if (!currentStep) {
+      throw new BadRequestException('Đơn đã được xử lý');
+    }
+    if (currentStep.approverId !== actor.sub && !actor.isAdmin) {
       throw new ForbiddenException('Không có quyền duyệt đơn này');
     }
 
+    await this.prisma.leaveApprovalStep.update({
+      where: { id: currentStep.id },
+      data: { status: decision, note: note ?? null, decidedAt: new Date() },
+    });
+
+    const isLastStep = currentStep.order === leave.approvalSteps.length - 1;
+    const finalStatus =
+      decision === ApprovalStepStatus.rejected
+        ? LeaveStatus.rejected
+        : isLastStep
+          ? LeaveStatus.approved
+          : null;
+
     const updated = await this.prisma.leaveRequest.update({
       where: { id },
-      data: {
-        status,
-        decidedAt: new Date(),
-        decidedById: actor.sub,
-        decisionNote: note ?? null,
-      },
+      data: finalStatus
+        ? {
+            status: finalStatus,
+            decidedAt: new Date(),
+            decidedById: actor.sub,
+            decisionNote: note ?? null,
+          }
+        : {},
       include: LEAVE_INCLUDE,
     });
 
     if (
-      status === LeaveStatus.approved &&
+      finalStatus === LeaveStatus.approved &&
       leave.leaveType === LeaveType.feedback &&
       leave.attendanceDate &&
       leave.correctionTime
