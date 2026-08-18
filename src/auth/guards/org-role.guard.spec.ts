@@ -2,10 +2,12 @@ import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { OrgRole } from '@prisma/client';
 import { OrgRoleGuard } from './org-role.guard';
-import { MIN_ORG_ROLE_KEY } from '../decorators/min-org-role.decorator';
 
 describe('OrgRoleGuard', () => {
-  function contextWithUser(user: { isAdmin: boolean; orgRole: OrgRole }): ExecutionContext {
+  function contextWithUser(user: {
+    isAdmin: boolean;
+    orgRole: OrgRole;
+  }): ExecutionContext {
     return {
       getHandler: () => ({}),
       getClass: () => ({}),
