@@ -4,6 +4,7 @@ import { DashboardAppController } from './dashboard.app.controller';
 import { DashboardAdminController } from './dashboard.admin.controller';
 import { ROLES_KEY } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 describe('DashboardAppController', () => {
   it('is mounted under app/dashboard with no class-level role guard', () => {
@@ -13,6 +14,7 @@ describe('DashboardAppController', () => {
     const guards =
       (Reflect.getMetadata(GUARDS_METADATA, DashboardAppController) as unknown[]) ?? [];
     expect(guards).not.toContain(RolesGuard);
+    expect(guards).toContain(JwtAuthGuard);
   });
 });
 

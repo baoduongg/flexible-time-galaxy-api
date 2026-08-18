@@ -4,6 +4,7 @@ import { LeaveAppController } from './leave.app.controller';
 import { LeaveAdminController } from './leave.admin.controller';
 import { ROLES_KEY } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 describe('LeaveAppController', () => {
   it('is mounted under app/leave with no class-level role guard', () => {
@@ -13,6 +14,7 @@ describe('LeaveAppController', () => {
     const guards =
       (Reflect.getMetadata(GUARDS_METADATA, LeaveAppController) as unknown[]) ?? [];
     expect(guards).not.toContain(RolesGuard);
+    expect(guards).toContain(JwtAuthGuard);
   });
 });
 
